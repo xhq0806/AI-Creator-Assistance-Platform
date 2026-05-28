@@ -13,6 +13,10 @@ const PromptTemplate = sequelize.define(
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: true,
     },
+    team_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true,
+    },
     name: {
       type: DataTypes.STRING(80),
       allowNull: false,
@@ -25,6 +29,11 @@ const PromptTemplate = sequelize.define(
     content: {
       type: DataTypes.TEXT,
       allowNull: false,
+    },
+    visibility: {
+      type: DataTypes.ENUM('private', 'team_public', 'system_public'),
+      allowNull: false,
+      defaultValue: 'private',
     },
     usage_count: {
       type: DataTypes.INTEGER.UNSIGNED,

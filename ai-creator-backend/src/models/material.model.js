@@ -21,9 +21,26 @@ const Material = sequelize.define(
       type: DataTypes.STRING(600),
       allowNull: false,
     },
+    file_key: {
+      type: DataTypes.STRING(512),
+      allowNull: true,
+    },
+    file_size: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true,
+    },
+    mime_type: {
+      type: DataTypes.STRING(128),
+      allowNull: true,
+    },
     media_type: {
       type: DataTypes.ENUM('image', 'video', 'audio'),
       allowNull: false,
+    },
+    upload_status: {
+      type: DataTypes.ENUM('pending', 'uploading', 'done', 'failed'),
+      allowNull: false,
+      defaultValue: 'done',
     },
     risk_status: {
       type: DataTypes.ENUM('approved', 'rejected'),

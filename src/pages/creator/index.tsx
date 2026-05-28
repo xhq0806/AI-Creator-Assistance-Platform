@@ -7,11 +7,14 @@ import {
   Divider,
   Form,
   Input,
+  Select,
   Space,
   Tag,
   Typography,
   message,
+  Upload,
 } from "antd";
+import type { UploadProps } from "antd";
 import {
   ThunderboltOutlined,
   SafetyCertificateOutlined,
@@ -33,6 +36,8 @@ import {
   fetchPromptTemplates,
   generateContent,
   generateImage,
+  getUploadCredential,
+  confirmUpload,
   markPromptTemplateUsed,
   saveDraft,
   syncDistribution,
@@ -41,6 +46,7 @@ import {
   type AuditResult,
   type MaterialItem,
   type PromptTemplate,
+  type UploadCredential,
 } from "@/services/api";
 import {
   createLocalDraftId,
@@ -729,11 +735,21 @@ export default function CreatorPage() {
                 onChange={(event) => setPromptName(event.target.value)}
                 placeholder="模板名称"
               />
-              <Input
+              <Select
                 value={promptCategory}
-                onChange={(event) => setPromptCategory(event.target.value)}
-                placeholder="分类"
-              />
+                onChange={(value) => setPromptCategory(value)}
+                style={{ minWidth: 120 }}
+                placeholder="选择分类"
+              >
+                <Select.Option value="通用">通用</Select.Option>
+                <Select.Option value="文章写作">文章写作</Select.Option>
+                <Select.Option value="营销文案">营销文案</Select.Option>
+                <Select.Option value="技术开发">技术开发</Select.Option>
+                <Select.Option value="创意设计">创意设计</Select.Option>
+                <Select.Option value="教育培训">教育培训</Select.Option>
+                <Select.Option value="办公效率">办公效率</Select.Option>
+                <Select.Option value="代码生成">代码生成</Select.Option>
+              </Select>
             </Space.Compact>
             <Button
               block
@@ -766,20 +782,133 @@ export default function CreatorPage() {
             </Space>
           </Card>
           <Card className={styles.sideCard} title="素材管理与合规校验">
-            <Input
-              style={{ marginBottom: 8 }}
-              value={materialName}
-              onChange={(event) => setMaterialName(event.target.value)}
-              placeholder="素材名称"
-            />
-            <Space.Compact style={{ width: "100%" }}>
-              <Input
-                value={materialInput}
-                onChange={(event) => setMaterialInput(event.target.value)}
-                placeholder="https://.../image.webp"
-              />
-              <Button onClick={addMaterial}>添加</Button>
-            </Space.Compact>
+            <Upload
+              name="file"
+              accept="image/*,video/*,audio/*"
+              customRequest={async (options) => {
+                const { file, onSuccess, onError, onProgress } = options;
+                try {
+                  onProgress?.({ percent: 5 });
+                  const credential = await getUploadCredential({
+                    file_name: (file as File).name,
+                    file_type: (file as File).type,
+                  });
+
+                  if (credential.provider === "mock_demo") {
+                    onProgress?.({ percent: 100 });
+                    const fileObj = file as File;
+                    if (fileObj.type.startsWith("image/")) {
+                      const reader = new FileReader();
+                      reader.onload = (e) => {
+                        const localUrl = e.target?.result as string;
+                        messageApi.success("演示模式，素材已添加");
+                        setMediaUrls((prev) =>
+                          Array.from(new Set([...prev, localUrl]))
+                        );
+                        onSuccess?.({ url: localUrl });
+                      };
+                      reader.onerror = () => {
+                        messageApi.success("演示模式，素材已添加");
+                        setMediaUrls((prev) =>
+                          Array.from(new Set([...prev, credential.access_url]))
+                        );
+                        onSuccess?.({ url: credential.access_url });
+                      };
+                      reader.readAsDataURL(fileObj);
+                    } else {
+                      messageApi.success("演示模式，素材已添加");
+                      setMediaUrls((prev) =>
+                        Array.from(new Set([...prev, credential.access_url]))
+                      );
+                      onSuccess?.({ url: credential.access_url });
+                    }
+                    return;
+                  }
+
+                  onProgress?.({ percent: 10 });
+                  const formData = new FormData();
+                  formData.append("key", credential.oss_key || "");
+                  formData.append("OSSAccessKeyId", credential.access_id || "");
+                  formData.append("policy", credential.policy || "");
+                  formData.append("signature", credential.signature || "");
+                  formData.append("file", file as File);
+
+                  console.log("[阿里云OSS上传] 开始上传，凭证:", credential);
+                  const xhr = new XMLHttpRequest();
+                  xhr.upload.addEventListener("progress", (event) => {
+                    if (event.total > 0) {
+                      onProgress?.({
+                        percent: Math.round(
+                          10 + (event.loaded / event.total) * 85
+                        ),
+                      });
+                    }
+                  });
+                  xhr.addEventListener("load", async () => {
+                    console.log(
+                      "[阿里云OSS上传] 响应状态码:",
+                      xhr.status,
+                      "响应文本:",
+                      xhr.responseText
+                    );
+                    if (
+                      xhr.status === 204 ||
+                      xhr.status === 200 ||
+                      xhr.status === 201
+                    ) {
+                      onProgress?.({ percent: 98 });
+                      await confirmUpload({
+                        material_id: credential.material_id!,
+                        file_size: (file as File).size,
+                        mime_type: (file as File).type,
+                      });
+                      onProgress?.({ percent: 100 });
+                      messageApi.success("素材已上传至阿里云 OSS");
+                      setMediaUrls((prev) =>
+                        Array.from(new Set([...prev, credential.access_url]))
+                      );
+                      onSuccess?.({ url: credential.access_url });
+                    } else {
+                      onError?.(
+                        new Error(
+                          "上传到阿里云 OSS 失败，HTTP 状态码: " +
+                            xhr.status +
+                            " 响应: " +
+                            xhr.responseText
+                        )
+                      );
+                    }
+                  });
+                  xhr.addEventListener("error", (e) => {
+                    console.error("[阿里云OSS上传] 网络错误详情:", e);
+                    console.error(
+                      "[阿里云OSS上传] 提示：请检查阿里云OSS Bucket的CORS跨域配置！"
+                    );
+                    onError?.(
+                      new Error("上传失败，最可能是阿里云OSS没有配置跨域规则")
+                    );
+                  });
+                  xhr.open("POST", credential.upload_url);
+                  xhr.send(formData);
+                } catch (err) {
+                  onError?.(err as Error);
+                }
+              }}
+              onChange={(info) => {
+                if (info.file.status === "done") {
+                  messageApi.success("素材上传完成");
+                } else if (info.file.status === "error") {
+                  messageApi.error("素材上传失败");
+                }
+              }}
+              maxCount={10}
+              multiple
+              listType="picture-card"
+            >
+              <div style={{ padding: 16, textAlign: "center" }}>
+                + 选择本地上传
+              </div>
+            </Upload>
             <Divider />
             <Space direction="vertical" size={8}>
               {materials.map((item) => (
@@ -816,36 +945,87 @@ export default function CreatorPage() {
                 </Space>
               ))}
               {mediaUrls.length ? (
-                mediaUrls.map((url) => (
-                  <Space
-                    key={url}
-                    direction="vertical"
-                    size={4}
-                    style={{ width: "100%" }}
-                  >
-                    {url.startsWith("data:image/") ||
-                    /\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i.test(url) ? (
-                      <img
-                        className={styles.materialPreview}
-                        src={url}
-                        alt="AI 生成配图"
-                      />
-                    ) : null}
-                    <Tag
-                      closable
-                      onClose={() =>
-                        setMediaUrls((current) =>
-                          current.filter((item) => item !== url)
-                        )
-                      }
-                    >
-                      {url.length > 36 ? `${url.slice(0, 36)}...` : url}
-                    </Tag>
-                  </Space>
-                ))
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                    width: "100%",
+                  }}
+                >
+                  {mediaUrls.map((url) => {
+                    const isImage =
+                      url.startsWith("data:image/") ||
+                      url.startsWith("http://") ||
+                      url.startsWith("https://");
+                    return (
+                      <div
+                        key={url}
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          borderRadius: "10px",
+                          overflow: "hidden",
+                          background: "#1f2937",
+                        }}
+                      >
+                        {isImage ? (
+                          <img
+                            src={url}
+                            alt="素材图片"
+                            style={{
+                              width: "100%",
+                              height: "auto",
+                              maxHeight: "220px",
+                              objectFit: "contain",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: "100%",
+                              height: "120px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#9ca3af",
+                              fontSize: "16px",
+                            }}
+                          >
+                            非图片素材
+                          </div>
+                        )}
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 8,
+                            right: 8,
+                            background: "rgba(0,0,0,0.75)",
+                            borderRadius: "50%",
+                            width: "36px",
+                            height: "36px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            cursor: "pointer",
+                            color: "white",
+                            fontSize: "20px",
+                          }}
+                          onClick={() =>
+                            setMediaUrls((current) =>
+                              current.filter((item) => item !== url)
+                            )
+                          }
+                        >
+                          ×
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <Typography.Text className={styles.whiteText}>
-                  可添加图片、视频、音频 URL，AI 生成时会作为素材上下文。
+                  点击上方加号直接从本地选择图片、视频、音频文件上传。
                 </Typography.Text>
               )}
             </Space>

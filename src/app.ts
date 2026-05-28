@@ -1,21 +1,18 @@
-export type CurrentUser = {
+export interface CurrentUser {
   id: number;
   username: string;
-  phone?: string;
-  email?: string;
   token: string;
-};
+}
 
-export async function getInitialState(): Promise<{ currentUser?: CurrentUser }> {
-  const rawUser = window.localStorage.getItem('ai_creator_user');
-  if (!rawUser) {
-    return {};
-  }
-
+export async function getInitialState() {
   try {
-    return { currentUser: JSON.parse(rawUser) as CurrentUser };
+    const saved = window.localStorage.getItem("ai_creator_user");
+    if (saved) {
+      const user = JSON.parse(saved) as CurrentUser;
+      return { currentUser: user, isLoggedIn: true };
+    }
   } catch {
-    window.localStorage.removeItem('ai_creator_user');
-    return {};
+    // ignore
   }
+  return { currentUser: null, isLoggedIn: false };
 }

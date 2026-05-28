@@ -13,6 +13,9 @@ const rankingController = require('./controllers/ranking.controller');
 const distributionController = require('./controllers/distribution.controller');
 const promptController = require('./controllers/prompt.controller');
 const materialController = require('./controllers/material.controller');
+const uploadController = require('./controllers/upload.controller');
+const promptTeamController = require('./controllers/prompt-team.controller');
+const auditAnnotationController = require('./controllers/audit-annotation.controller');
 
 const app = express();
 
@@ -33,18 +36,37 @@ app.get('/api/v1/health', (req, res) => {
 
 app.post('/api/v1/auth/login', authController.login);
 app.post('/api/v1/auth/register', authController.register);
+
 app.post('/api/v1/ai/generate', requireAuth, aiRateLimiter(10), aiController.generate);
 app.post('/api/v1/ai/generate-image', requireAuth, aiRateLimiter(8), aiController.generateImage);
 app.post('/api/v1/ai/audit', requireAuth, aiRateLimiter(20), aiController.audit);
 app.post('/api/v1/ai/quality', requireAuth, aiRateLimiter(20), aiController.quality);
+
 app.get('/api/v1/prompts', requireAuth, promptController.list);
 app.post('/api/v1/prompts', requireAuth, promptController.create);
 app.put('/api/v1/prompts/:id', requireAuth, promptController.update);
 app.delete('/api/v1/prompts/:id', requireAuth, promptController.remove);
 app.post('/api/v1/prompts/:id/use', requireAuth, promptController.markUsed);
+
 app.get('/api/v1/materials', requireAuth, materialController.list);
 app.post('/api/v1/materials', requireAuth, materialController.create);
 app.delete('/api/v1/materials/:id', requireAuth, materialController.remove);
+
+app.post('/api/v1/upload/credential', requireAuth, uploadController.getUploadCredential);
+app.post('/api/v1/upload/confirm', requireAuth, uploadController.confirmUpload);
+
+app.post('/api/v1/prompt-teams', requireAuth, promptTeamController.createTeam);
+app.get('/api/v1/prompt-teams', requireAuth, promptTeamController.listMyTeams);
+app.post('/api/v1/prompt-teams/members', requireAuth, promptTeamController.addTeamMember);
+app.post('/api/v1/prompts/with-version', requireAuth, promptTeamController.saveTemplateWithVersion);
+app.get('/api/v1/prompts/:template_id/versions', requireAuth, promptTeamController.listTemplateVersions);
+app.post('/api/v1/prompts/:template_id/versions/:version_id/restore', requireAuth, promptTeamController.restoreTemplateVersion);
+
+app.post('/api/v1/audit/annotations', requireAuth, auditAnnotationController.createAnnotation);
+app.get('/api/v1/audit/annotations', requireAuth, auditAnnotationController.listAnnotations);
+app.post('/api/v1/audit/evaluation/report', requireAuth, auditAnnotationController.generateEvaluationReport);
+app.get('/api/v1/audit/evaluation/reports', requireAuth, auditAnnotationController.listEvaluationReports);
+
 app.post('/api/v1/articles/draft', requireAuth, articleController.upsertDraft);
 app.post('/api/v1/articles/drafts/sync', requireAuth, articleController.syncDrafts);
 app.get('/api/v1/articles/latest-draft', requireAuth, articleController.latestDraft);
@@ -53,7 +75,9 @@ app.post('/api/v1/articles/:id/versions/:versionId/restore', requireAuth, articl
 app.post('/api/v1/articles/:id/withdraw', requireAuth, articleController.withdraw);
 app.post('/api/v1/articles/:id/feedback', articleController.feedback);
 app.get('/api/v1/articles/:id', articleController.detail);
+
 app.get('/api/v1/rank/hot', rankingController.hot);
+
 app.post('/api/v1/distribution/sync', requireAuth, distributionController.sync);
 
 app.use(errorHandler);
@@ -65,11 +89,9 @@ async function bootstrap() {
   });
 }
 
-if (require.main === module) {
-  bootstrap().catch((error) => {
-    console.error('[bootstrap] failed:', error);
-    process.exit(1);
-  });
-}
+bootstrap().catch((error) => {
+  console.error('[bootstrap] failed:', error);
+  process.exit(1);
+});
 
 module.exports = app;

@@ -1,6 +1,7 @@
 import { Button } from "antd";
 import { Link, Outlet, useLocation, useModel } from "umi";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import CreationIcon from "@/assets/Creation.png";
 import styles from "./index.less";
 
 export default function Layout() {
@@ -24,6 +25,7 @@ export default function Layout() {
     <div className={shellClassName}>
       <header className={styles.header}>
         <Link to="/index" className={styles.brand}>
+          <img src={CreationIcon} className={styles.brandIcon} alt="logo" />
           AI Creator Platform
         </Link>
         <nav className={styles.nav}>

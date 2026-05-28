@@ -25,4 +25,11 @@ module.exports = {
     baseURL: process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
     model: process.env.ARK_MODEL || 'doubao-seed-1-6-250615',
   },
+  cloud: {
+    provider: process.env.CLOUD_PROVIDER || 'mock',
+    ossAccessKeyId: process.env.OSS_ACCESS_KEY_ID || '',
+    ossAccessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
+    ossBucket: process.env.OSS_BUCKET || 'ai-creator',
+    ossRegion: process.env.OSS_REGION || 'oss-cn-hangzhou',
+  },
 };
