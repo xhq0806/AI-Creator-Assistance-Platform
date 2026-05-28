@@ -79,13 +79,15 @@ AI 评分返回结构：
 发布成功后，文章质量分被写入 `articles.quality_score`，并刷新 Redis 热榜。热榜排序公式：
 
 ```text
-score = quality_score * 0.4 + ln(view_count + 1) * 0.4 - age_hours * 0.2
+score = quality_score * 0.4 + ln(view_count + 1) * 0.4 + ln(like_count + favorite_count * 2 + 1) * 0.3 - negative_count * 0.3 - age_hours * 0.2
 ```
 
 设计意图：
 
 - 高质量文章获得基础曝光。
 - 阅读量高的文章获得热度加成。
+- 点赞和收藏提供正向反馈，收藏权重更高。
+- 负反馈会降低热榜权重。
 - 老内容随时间自然衰减，给新内容机会。
 
 ## 评估方法
@@ -110,5 +112,5 @@ score = quality_score * 0.4 + ln(view_count + 1) * 0.4 - age_hours * 0.2
 ## 当前实现边界
 
 - 当前没有内置人工标注测试集，准确率需通过后续样本评估证明。
-- 素材安全只做 URL 和文件类型校验，尚未对图片、视频、音频内容做多模态审核。
+- 素材安全只做 URL、文件类型和基础风险词校验，尚未对图片、视频、音频内容做多模态审核。
 - 质量评分依赖模型输出，兜底评分只适合演示，不适合线上分发决策。

@@ -14,13 +14,59 @@ CREATE TABLE IF NOT EXISTS `articles` (
   `title` VARCHAR(255) NOT NULL,
   `content` LONGTEXT NOT NULL,
   `media_urls` JSON DEFAULT NULL,
-  `status` ENUM('draft', 'pending_review', 'published', 'rejected') DEFAULT 'draft',
+  `status` ENUM('draft', 'pending_review', 'published', 'rejected', 'withdrawn') DEFAULT 'draft',
   `quality_score` DECIMAL(5,2) DEFAULT 0.00,
   `view_count` INT UNSIGNED DEFAULT 0,
+  `like_count` INT UNSIGNED DEFAULT 0,
+  `favorite_count` INT UNSIGNED DEFAULT 0,
+  `negative_count` INT UNSIGNED DEFAULT 0,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`),
   INDEX `idx_quality_status` (`status`, `quality_score` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `prompt_templates` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED DEFAULT NULL,
+  `name` VARCHAR(80) NOT NULL,
+  `category` VARCHAR(40) NOT NULL DEFAULT '通用',
+  `content` TEXT NOT NULL,
+  `usage_count` INT UNSIGNED DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `materials` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `name` VARCHAR(120) NOT NULL,
+  `url` VARCHAR(600) NOT NULL,
+  `media_type` ENUM('image', 'video', 'audio') NOT NULL,
+  `risk_status` ENUM('approved', 'rejected') NOT NULL DEFAULT 'approved',
+  `risk_reason` VARCHAR(255) NOT NULL DEFAULT '基础校验通过',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`),
+  INDEX `idx_material_user_type` (`user_id`, `media_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `article_versions` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `article_id` BIGINT UNSIGNED NOT NULL,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `version_no` INT UNSIGNED NOT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `content` LONGTEXT NOT NULL,
+  `media_urls` JSON DEFAULT NULL,
+  `status` VARCHAR(30) NOT NULL,
+  `quality_score` DECIMAL(5,2) DEFAULT 0.00,
+  `source` ENUM('draft_save', 'publish', 'offline_sync', 'restore', 'withdraw') NOT NULL DEFAULT 'draft_save',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`article_id`) REFERENCES `articles`(`id`),
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`),
+  INDEX `idx_article_version` (`article_id`, `version_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `audit_logs` (

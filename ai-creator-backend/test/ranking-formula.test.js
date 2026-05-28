@@ -17,6 +17,24 @@ test('calculateHotScore combines quality, views, and time decay', () => {
   assert.equal(score, expected);
 });
 
+test('calculateHotScore includes positive and negative feedback', () => {
+  const now = Date.parse('2026-05-28T12:00:00.000Z');
+  const score = calculateHotScore(
+    {
+      quality_score: 70,
+      view_count: 9,
+      like_count: 3,
+      favorite_count: 2,
+      negative_count: 1,
+      created_at: '2026-05-28T12:00:00.000Z',
+    },
+    now,
+  );
+
+  const expected = 70 * 0.4 + Math.log(10) * 0.4 + Math.log(8) * 0.3 - 0.3;
+  assert.equal(score, expected);
+});
+
 test('calculateHotScore does not reward future timestamps', () => {
   const now = Date.parse('2026-05-28T12:00:00.000Z');
   const score = calculateHotScore(

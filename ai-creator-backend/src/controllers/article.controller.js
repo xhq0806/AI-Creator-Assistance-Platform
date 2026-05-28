@@ -1,5 +1,6 @@
-const { Article, User } = require('../models');
+const { Article, User, ArticleVersion } = require('../models');
 const { auditContent, evaluateQuality } = require('../services/ai.service');
+const { createArticleVersion, serializeArticleVersion } = require('../services/article-version.service');
 const { normalizeDraftForSync, isMeaningfulDraftPayload } = require('../services/draft-sync.service');
 const { calculateHotScore, refreshArticleRank } = require('../services/ranking.service');
 const { ok } = require('../utils/apiResponse');
@@ -12,6 +13,9 @@ function serializeArticle(article) {
     id: Number(payload.id),
     user_id: Number(payload.user_id),
     quality_score: Number(payload.quality_score || 0),
+    like_count: Number(payload.like_count || 0),
+    favorite_count: Number(payload.favorite_count || 0),
+    negative_count: Number(payload.negative_count || 0),
     cover_url: Array.isArray(mediaUrls) ? mediaUrls[0] : undefined,
     author: payload.User
       ? {
@@ -56,6 +60,7 @@ async function upsertDraft(req, res, next) {
     };
 
     const savedArticle = article ? await article.update(payload) : await Article.create(payload);
+    await createArticleVersion(savedArticle, status === 'published' ? 'publish' : 'draft_save');
     await refreshArticleRank(savedArticle);
 
     if (auditResult && !auditResult.is_compliant) {
@@ -94,6 +99,7 @@ async function syncDrafts(req, res, next) {
       const existedArticle = draft.id ? await Article.findOne({ where: { id: draft.id, user_id: req.user.id } }) : null;
       const savedArticle = existedArticle ? await existedArticle.update(payload) : await Article.create(payload);
 
+      await createArticleVersion(savedArticle, 'offline_sync');
       await refreshArticleRank(savedArticle);
       results.push({
         localId: draft.localId,
@@ -143,10 +149,131 @@ async function detail(req, res, next) {
   }
 }
 
+async function versions(req, res, next) {
+  try {
+    const article = await Article.findOne({
+      where: {
+        id: req.params.id,
+        user_id: req.user.id,
+      },
+    });
+    if (!article) {
+      return res.status(404).json({ code: 404, message: '文章不存在或无权查看版本' });
+    }
+
+    const list = await ArticleVersion.findAll({
+      where: {
+        article_id: article.id,
+        user_id: req.user.id,
+      },
+      order: [['version_no', 'DESC']],
+      limit: 30,
+    });
+
+    return ok(res, list.map(serializeArticleVersion));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function restoreVersion(req, res, next) {
+  try {
+    const article = await Article.findOne({
+      where: {
+        id: req.params.id,
+        user_id: req.user.id,
+      },
+    });
+    if (!article) {
+      return res.status(404).json({ code: 404, message: '文章不存在或无权回滚' });
+    }
+
+    const version = await ArticleVersion.findOne({
+      where: {
+        id: req.params.versionId,
+        article_id: article.id,
+        user_id: req.user.id,
+      },
+    });
+    if (!version) {
+      return res.status(404).json({ code: 404, message: '版本不存在' });
+    }
+
+    const restoredArticle = await article.update({
+      title: version.title,
+      content: version.content,
+      media_urls: version.media_urls || [],
+      status: 'draft',
+      quality_score: version.quality_score || 0,
+    });
+
+    await createArticleVersion(restoredArticle, 'restore');
+    await refreshArticleRank(restoredArticle);
+
+    return ok(res, serializeArticle(restoredArticle));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function withdraw(req, res, next) {
+  try {
+    const article = await Article.findOne({
+      where: {
+        id: req.params.id,
+        user_id: req.user.id,
+      },
+    });
+    if (!article) {
+      return res.status(404).json({ code: 404, message: '文章不存在或无权撤回' });
+    }
+
+    const savedArticle = await article.update({ status: 'withdrawn' });
+    await createArticleVersion(savedArticle, 'withdraw');
+    await refreshArticleRank(savedArticle);
+
+    return ok(res, serializeArticle(savedArticle));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function feedback(req, res, next) {
+  try {
+    const feedbackType = req.body.type;
+    const fieldByType = {
+      like: 'like_count',
+      favorite: 'favorite_count',
+      negative: 'negative_count',
+    };
+    const field = fieldByType[feedbackType];
+    if (!field) {
+      return res.status(400).json({ code: 400, message: '反馈类型不支持' });
+    }
+
+    const article = await Article.findByPk(req.params.id);
+    if (!article || article.status !== 'published') {
+      return res.status(404).json({ code: 404, message: '文章不存在或不可反馈' });
+    }
+
+    await article.increment(field, { by: 1 });
+    await article.reload({ include: [{ model: User, attributes: ['id', 'username'] }] });
+    await refreshArticleRank(article);
+
+    return ok(res, serializeArticle(article));
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports = {
   upsertDraft,
   syncDrafts,
   latestDraft,
   detail,
+  versions,
+  restoreVersion,
+  withdraw,
+  feedback,
   serializeArticle,
 };

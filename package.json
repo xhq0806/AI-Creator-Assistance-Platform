@@ -6,6 +6,7 @@
     "build": "umi build",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run typecheck && pnpm --dir ai-creator-backend run check && pnpm --dir ai-creator-backend run test",
+    "smoke:e2e": "node scripts/smoke-e2e.js",
     "postinstall": "umi setup",
     "setup": "umi setup",
     "start": "npm run dev",

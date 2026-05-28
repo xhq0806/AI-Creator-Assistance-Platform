@@ -11,6 +11,8 @@ const aiController = require('./controllers/ai.controller');
 const articleController = require('./controllers/article.controller');
 const rankingController = require('./controllers/ranking.controller');
 const distributionController = require('./controllers/distribution.controller');
+const promptController = require('./controllers/prompt.controller');
+const materialController = require('./controllers/material.controller');
 
 const app = express();
 
@@ -35,9 +37,21 @@ app.post('/api/v1/ai/generate', requireAuth, aiRateLimiter(10), aiController.gen
 app.post('/api/v1/ai/generate-image', requireAuth, aiRateLimiter(8), aiController.generateImage);
 app.post('/api/v1/ai/audit', requireAuth, aiRateLimiter(20), aiController.audit);
 app.post('/api/v1/ai/quality', requireAuth, aiRateLimiter(20), aiController.quality);
+app.get('/api/v1/prompts', requireAuth, promptController.list);
+app.post('/api/v1/prompts', requireAuth, promptController.create);
+app.put('/api/v1/prompts/:id', requireAuth, promptController.update);
+app.delete('/api/v1/prompts/:id', requireAuth, promptController.remove);
+app.post('/api/v1/prompts/:id/use', requireAuth, promptController.markUsed);
+app.get('/api/v1/materials', requireAuth, materialController.list);
+app.post('/api/v1/materials', requireAuth, materialController.create);
+app.delete('/api/v1/materials/:id', requireAuth, materialController.remove);
 app.post('/api/v1/articles/draft', requireAuth, articleController.upsertDraft);
 app.post('/api/v1/articles/drafts/sync', requireAuth, articleController.syncDrafts);
 app.get('/api/v1/articles/latest-draft', requireAuth, articleController.latestDraft);
+app.get('/api/v1/articles/:id/versions', requireAuth, articleController.versions);
+app.post('/api/v1/articles/:id/versions/:versionId/restore', requireAuth, articleController.restoreVersion);
+app.post('/api/v1/articles/:id/withdraw', requireAuth, articleController.withdraw);
+app.post('/api/v1/articles/:id/feedback', articleController.feedback);
 app.get('/api/v1/articles/:id', articleController.detail);
 app.get('/api/v1/rank/hot', rankingController.hot);
 app.post('/api/v1/distribution/sync', requireAuth, distributionController.sync);

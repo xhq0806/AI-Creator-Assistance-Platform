@@ -1,19 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Alert, Button, Card, Divider, Form, Input, Space, Tag, Typography, message } from 'antd';
-import { ThunderboltOutlined, SafetyCertificateOutlined, SaveOutlined } from '@ant-design/icons';
+import { ThunderboltOutlined, SafetyCertificateOutlined, SaveOutlined, DeleteOutlined, BarChartOutlined } from '@ant-design/icons';
 import { history, useLocation, useModel, useParams } from 'umi';
 import {
   auditContent,
+  createMaterial,
+  createPromptTemplate,
+  deleteMaterial,
+  deletePromptTemplate,
+  evaluateQuality,
   fetchArticle,
   fetchLatestDraft,
+  fetchMaterials,
+  fetchPromptTemplates,
   generateContent,
   generateImage,
+  markPromptTemplateUsed,
   saveDraft,
   syncDistribution,
   syncOfflineDrafts,
   type ArticleDraft,
   type AuditResult,
+  type MaterialItem,
+  type PromptTemplate,
 } from '@/services/api';
 import {
   createLocalDraftId,
@@ -26,14 +36,16 @@ import styles from './index.less';
 
 const AUTOSAVE_INTERVAL = 30_000;
 
-const promptTemplates = [
-  '将素材改写成一篇适合今日头条的信息增量型短图文，要求标题有冲突感，正文分 3 段。',
-  '围绕核心素材生成一篇种草内容，突出真实体验、适用人群和行动建议。',
-  '把以下观点扩展成长文大纲，包含开头钩子、关键论点、案例和结尾互动。',
-];
-
 type CreatorForm = ArticleDraft & {
   prompt: string;
+};
+
+type QualityResult = {
+  quality_score: number;
+  structure: number;
+  depth: number;
+  fluency: number;
+  reason: string;
 };
 
 type RichContentEditorProps = {
@@ -126,10 +138,17 @@ export default function CreatorPage() {
   const [generating, setGenerating] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [auditing, setAuditing] = useState(false);
+  const [scoring, setScoring] = useState(false);
   const [auditResult, setAuditResult] = useState<AuditResult>();
+  const [qualityResult, setQualityResult] = useState<QualityResult>();
   const [articleId, setArticleId] = useState<number>();
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
   const [materialInput, setMaterialInput] = useState('');
+  const [materialName, setMaterialName] = useState('');
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
+  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
+  const [promptName, setPromptName] = useState('');
+  const [promptCategory, setPromptCategory] = useState('通用');
   const [loadedStatus, setLoadedStatus] = useState<ArticleDraft['status']>('draft');
   const localDraftId = useRef(createLocalDraftId());
 
@@ -154,6 +173,7 @@ export default function CreatorPage() {
     }
 
     void hydrateEditor();
+    void hydrateWorkspaceResources();
   }, [isLoggedIn, currentUser?.id, params.id, shouldRestoreLatestDraft]);
 
   useEffect(() => {
@@ -198,12 +218,24 @@ export default function CreatorPage() {
     messageApi.success(`已静默同步 ${result.synced} 份离线草稿`);
   }
 
+  async function hydrateWorkspaceResources() {
+    try {
+      const [promptList, materialList] = await Promise.all([fetchPromptTemplates(), fetchMaterials()]);
+      setPromptTemplates(promptList);
+      setMaterials(materialList);
+    } catch (error) {
+      messageApi.warning(error instanceof Error ? `工作台资源加载失败：${error.message}` : '工作台资源加载失败');
+    }
+  }
+
   function resetEditor() {
     form.resetFields();
     setArticleId(undefined);
     setAuditResult(undefined);
+    setQualityResult(undefined);
     setMediaUrls([]);
     setMaterialInput('');
+    setMaterialName('');
     setLoadedStatus('draft');
     localDraftId.current = createLocalDraftId();
   }
@@ -375,18 +407,79 @@ export default function CreatorPage() {
     messageApi.success('已应用合规替代内容');
   }
 
-  function addMaterial() {
-    const url = materialInput.trim();
-    const validUrl = /^https?:\/\/.+/i.test(url);
-    const validType = /\.(png|jpg|jpeg|gif|webp|mp4|mov|mp3|wav)(\?.*)?$/i.test(url);
-
-    if (!validUrl || !validType || url.length > 500) {
-      messageApi.warning('素材需为合法 URL，且文件类型应为图片、视频或音频');
+  async function savePromptTemplate() {
+    const content = String(form.getFieldValue('prompt') || '').trim();
+    const name = promptName.trim();
+    if (!name || !content) {
+      messageApi.warning('请填写模板名称，并在创作提示词中准备模板内容');
       return;
     }
 
-    setMediaUrls((current) => Array.from(new Set([...current, url])));
-    setMaterialInput('');
+    try {
+      const prompt = await createPromptTemplate({
+        name,
+        category: promptCategory || '通用',
+        content,
+      });
+      setPromptTemplates((current) => [prompt, ...current]);
+      setPromptName('');
+      messageApi.success('Prompt 模板已保存');
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : 'Prompt 模板保存失败');
+    }
+  }
+
+  async function applyPromptTemplate(template: PromptTemplate) {
+    form.setFieldValue('prompt', template.content);
+    try {
+      const updated = await markPromptTemplateUsed(template.id);
+      setPromptTemplates((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    } catch {
+      // 使用计数失败不阻塞创作。
+    }
+  }
+
+  async function removePromptTemplate(template: PromptTemplate) {
+    try {
+      await deletePromptTemplate(template.id);
+      setPromptTemplates((current) => current.filter((item) => item.id !== template.id));
+      messageApi.success('Prompt 模板已删除');
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : 'Prompt 模板删除失败');
+    }
+  }
+
+  async function addMaterial() {
+    const url = materialInput.trim();
+    if (!url) {
+      messageApi.warning('请输入素材 URL');
+      return;
+    }
+
+    try {
+      const material = await createMaterial({
+        name: materialName.trim() || '未命名素材',
+        url,
+      });
+      setMaterials((current) => [material, ...current]);
+      setMediaUrls((current) => Array.from(new Set([...current, material.url])));
+      setMaterialName('');
+      setMaterialInput('');
+      messageApi.success('素材已通过基础校验并加入素材库');
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '素材添加失败');
+    }
+  }
+
+  async function removeMaterial(item: MaterialItem) {
+    try {
+      await deleteMaterial(item.id);
+      setMaterials((current) => current.filter((material) => material.id !== item.id));
+      setMediaUrls((current) => current.filter((url) => url !== item.url));
+      messageApi.success('素材已删除');
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '素材删除失败');
+    }
   }
 
   async function handleAudit() {
@@ -400,6 +493,25 @@ export default function CreatorPage() {
       messageApi.error(error instanceof Error ? error.message : '审核失败');
     } finally {
       setAuditing(false);
+    }
+  }
+
+  async function handleQualityScore() {
+    const values = form.getFieldsValue();
+    if (!values.title?.trim() || !values.content?.trim()) {
+      messageApi.warning('请先完善标题和正文');
+      return;
+    }
+
+    setScoring(true);
+    try {
+      const result = await evaluateQuality({ title: values.title, content: values.content });
+      setQualityResult(result);
+      messageApi.success(`质量评分 ${Math.round(result.quality_score)} 分`);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '质量评分失败');
+    } finally {
+      setScoring(false);
     }
   }
 
@@ -466,6 +578,9 @@ export default function CreatorPage() {
             <Button icon={<SafetyCertificateOutlined />} loading={auditing} onClick={handleAudit}>
               安全审核
             </Button>
+            <Button icon={<BarChartOutlined />} loading={scoring} onClick={handleQualityScore}>
+              质量评分
+            </Button>
             <Button icon={<SaveOutlined />} loading={saving} onClick={() => handleSaveDraft()}>
               保存草稿
             </Button>
@@ -489,21 +604,52 @@ export default function CreatorPage() {
 
         <Space direction="vertical" size={16}>
           <Card className={styles.sideCard} title="Prompt 管理">
+            <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
+              <Input value={promptName} onChange={(event) => setPromptName(event.target.value)} placeholder="模板名称" />
+              <Input value={promptCategory} onChange={(event) => setPromptCategory(event.target.value)} placeholder="分类" />
+            </Space.Compact>
+            <Button block style={{ marginBottom: 12 }} onClick={savePromptTemplate}>
+              保存当前提示词为模板
+            </Button>
             <Space className={styles.promptList} direction="vertical" size={8}>
               {promptTemplates.map((template) => (
-                <Button className={styles.promptButton} key={template} block title={template} onClick={() => form.setFieldValue('prompt', template)}>
-                  <span>{template}</span>
-                </Button>
+                <Space.Compact key={template.id} style={{ width: '100%' }}>
+                  <Button className={styles.promptButton} block title={template.content} onClick={() => applyPromptTemplate(template)}>
+                    <span>
+                      [{template.category}] {template.name}
+                    </span>
+                  </Button>
+                  {template.user_id ? (
+                    <Button icon={<DeleteOutlined />} onClick={() => removePromptTemplate(template)} />
+                  ) : null}
+                </Space.Compact>
               ))}
             </Space>
           </Card>
           <Card className={styles.sideCard} title="素材管理与合规校验">
+            <Input
+              style={{ marginBottom: 8 }}
+              value={materialName}
+              onChange={(event) => setMaterialName(event.target.value)}
+              placeholder="素材名称"
+            />
             <Space.Compact style={{ width: '100%' }}>
               <Input value={materialInput} onChange={(event) => setMaterialInput(event.target.value)} placeholder="https://.../image.webp" />
               <Button onClick={addMaterial}>添加</Button>
             </Space.Compact>
             <Divider />
             <Space direction="vertical" size={8}>
+              {materials.map((item) => (
+                <Space key={item.id} direction="vertical" size={4} style={{ width: '100%' }}>
+                  {item.media_type === 'image' ? <img className={styles.materialPreview} src={item.url} alt={item.name} /> : null}
+                  <Space.Compact style={{ width: '100%' }}>
+                    <Button block title={item.risk_reason} onClick={() => setMediaUrls((current) => Array.from(new Set([...current, item.url])))}>
+                      {item.name}
+                    </Button>
+                    <Button icon={<DeleteOutlined />} onClick={() => removeMaterial(item)} />
+                  </Space.Compact>
+                </Space>
+              ))}
               {mediaUrls.length ? (
                 mediaUrls.map((url) => (
                   <Space key={url} direction="vertical" size={4} style={{ width: '100%' }}>
@@ -546,6 +692,19 @@ export default function CreatorPage() {
               <Typography.Paragraph type="secondary">
                 审核会从涉黄、涉赌、涉毒、敏感信息四个维度返回结构化 JSON 结果。
               </Typography.Paragraph>
+            )}
+          </Card>
+          <Card className={styles.sideCard} title="质量评估">
+            {qualityResult ? (
+              <Space direction="vertical" size={8}>
+                <Tag color="blue">综合 {Math.round(qualityResult.quality_score)}</Tag>
+                <Tag>结构 {Math.round(qualityResult.structure)}</Tag>
+                <Tag>深度 {Math.round(qualityResult.depth)}</Tag>
+                <Tag>流畅 {Math.round(qualityResult.fluency)}</Tag>
+                <Typography.Paragraph type="secondary">{qualityResult.reason}</Typography.Paragraph>
+              </Space>
+            ) : (
+              <Typography.Paragraph type="secondary">发布时会自动评分，也可以在编辑过程中手动查看结构、深度、流畅度等子分。</Typography.Paragraph>
             )}
           </Card>
           <Card className={styles.sideCard} title="离线策略">

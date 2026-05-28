@@ -26,7 +26,7 @@ const Article = sequelize.define(
       allowNull: true,
     },
     status: {
-      type: DataTypes.ENUM('draft', 'pending_review', 'published', 'rejected'),
+      type: DataTypes.ENUM('draft', 'pending_review', 'published', 'rejected', 'withdrawn'),
       defaultValue: 'draft',
     },
     quality_score: {
@@ -38,6 +38,18 @@ const Article = sequelize.define(
       },
     },
     view_count: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      defaultValue: 0,
+    },
+    like_count: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      defaultValue: 0,
+    },
+    favorite_count: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      defaultValue: 0,
+    },
+    negative_count: {
       type: DataTypes.INTEGER.UNSIGNED,
       defaultValue: 0,
     },

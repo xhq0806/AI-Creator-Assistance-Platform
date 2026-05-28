@@ -11,7 +11,7 @@ export type ArticleDraft = {
   title: string;
   content: string;
   media_urls?: string[];
-  status?: 'draft' | 'pending_review' | 'published' | 'rejected';
+  status?: 'draft' | 'pending_review' | 'published' | 'rejected' | 'withdrawn';
   quality_score?: number;
 };
 
@@ -31,7 +31,40 @@ export type HotArticle = Required<Pick<ArticleDraft, 'id' | 'title' | 'content'>
   updated_at?: string;
   view_count: number;
   quality_score: number;
+  like_count: number;
+  favorite_count: number;
+  negative_count: number;
   score: number;
+};
+
+export type PromptTemplate = {
+  id: number;
+  user_id?: number | null;
+  name: string;
+  category: string;
+  content: string;
+  usage_count: number;
+};
+
+export type MaterialItem = {
+  id: number;
+  user_id: number;
+  name: string;
+  url: string;
+  media_type: 'image' | 'video' | 'audio';
+  risk_status: 'approved' | 'rejected';
+  risk_reason: string;
+};
+
+export type ArticleVersion = Required<Pick<ArticleDraft, 'id' | 'title' | 'content'>> & {
+  article_id: number;
+  user_id: number;
+  version_no: number;
+  media_urls?: string[];
+  status: NonNullable<ArticleDraft['status']>;
+  quality_score: number;
+  source: 'draft_save' | 'publish' | 'offline_sync' | 'restore' | 'withdraw';
+  created_at?: string;
 };
 
 export type OfflineDraftSyncResult = {
@@ -126,6 +159,76 @@ export async function auditContent(payload: Pick<ArticleDraft, 'title' | 'conten
   return response.data;
 }
 
+export async function evaluateQuality(payload: Pick<ArticleDraft, 'title' | 'content'>) {
+  const response = await requestJson<{ quality_score: number; structure: number; depth: number; fluency: number; reason: string }>(
+    '/api/v1/ai/quality',
+    {
+      method: 'POST',
+      data: payload,
+    },
+  );
+
+  return response.data;
+}
+
+export async function fetchPromptTemplates() {
+  const response = await requestJson<PromptTemplate[]>('/api/v1/prompts', {
+    method: 'GET',
+  });
+
+  return response.data;
+}
+
+export async function createPromptTemplate(payload: Pick<PromptTemplate, 'name' | 'category' | 'content'>) {
+  const response = await requestJson<PromptTemplate>('/api/v1/prompts', {
+    method: 'POST',
+    data: payload,
+  });
+
+  return response.data;
+}
+
+export async function deletePromptTemplate(id: number) {
+  const response = await requestJson<{ deleted: boolean }>(`/api/v1/prompts/${id}`, {
+    method: 'DELETE',
+  });
+
+  return response.data;
+}
+
+export async function markPromptTemplateUsed(id: number) {
+  const response = await requestJson<PromptTemplate>(`/api/v1/prompts/${id}/use`, {
+    method: 'POST',
+  });
+
+  return response.data;
+}
+
+export async function fetchMaterials() {
+  const response = await requestJson<MaterialItem[]>('/api/v1/materials', {
+    method: 'GET',
+  });
+
+  return response.data;
+}
+
+export async function createMaterial(payload: { name: string; url: string }) {
+  const response = await requestJson<MaterialItem>('/api/v1/materials', {
+    method: 'POST',
+    data: payload,
+  });
+
+  return response.data;
+}
+
+export async function deleteMaterial(id: number) {
+  const response = await requestJson<{ deleted: boolean }>(`/api/v1/materials/${id}`, {
+    method: 'DELETE',
+  });
+
+  return response.data;
+}
+
 export async function saveDraft(payload: ArticleDraft) {
   const response = await requestJson<ArticleDraft & { id: number }>('/api/v1/articles/draft', {
     method: 'POST',
@@ -148,6 +251,48 @@ export async function fetchArticle(id: number) {
     `/api/v1/articles/${id}`,
     {
       method: 'GET',
+    },
+  );
+
+  return response.data;
+}
+
+export async function fetchArticleVersions(id: number) {
+  const response = await requestJson<ArticleVersion[]>(`/api/v1/articles/${id}/versions`, {
+    method: 'GET',
+  });
+
+  return response.data;
+}
+
+export async function restoreArticleVersion(articleId: number, versionId: number) {
+  const response = await requestJson<HotArticle & { status: NonNullable<ArticleDraft['status']>; media_urls?: string[] }>(
+    `/api/v1/articles/${articleId}/versions/${versionId}/restore`,
+    {
+      method: 'POST',
+    },
+  );
+
+  return response.data;
+}
+
+export async function withdrawArticle(id: number) {
+  const response = await requestJson<HotArticle & { status: NonNullable<ArticleDraft['status']>; media_urls?: string[] }>(
+    `/api/v1/articles/${id}/withdraw`,
+    {
+      method: 'POST',
+    },
+  );
+
+  return response.data;
+}
+
+export async function sendArticleFeedback(id: number, type: 'like' | 'favorite' | 'negative') {
+  const response = await requestJson<HotArticle & { status: NonNullable<ArticleDraft['status']>; media_urls?: string[] }>(
+    `/api/v1/articles/${id}/feedback`,
+    {
+      method: 'POST',
+      data: { type },
     },
   );
 

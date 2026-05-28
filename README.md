@@ -5,10 +5,12 @@
 ## 功能完成度
 
 - 用户中心：支持用户名、手机号、邮箱登录注册，JWT 认证和安全退出。
-- AI 创作：支持提示词模板、素材 URL 管理、图文内容生成、AI 配图生成。
+- AI 创作：支持提示词模板管理、素材库管理、图文内容生成、AI 配图生成。
 - 内容审核：发布前自动审核，风险内容驳回；编辑器侧支持一键应用合规替代文本。
-- 质量评分：发布时由大模型或本地兜底算法生成质量分，参与热榜排序。
+- 质量评分：支持编辑过程手动评分，发布时自动评分，质量分参与热榜排序。
 - 草稿体系：在线 30 秒自动保存；离线写作落 IndexedDB；网络恢复后增量同步并回写服务端 ID。
+- 版本管理：每次保存、发布、离线同步、撤回和回滚都会生成版本记录，作者可回滚为草稿。
+- 内容治理：已发布内容支持撤回，读者反馈会进入热榜排序。
 - 内容消费：爆文发现页、文章详情页、阅读量统计、作者信息和质量分展示。
 - 分发场景：模拟同步到今日头条、抖音，并返回平台侧内容 ID。
 
@@ -35,6 +37,7 @@ AICD_Platform/
     src/services/              AI、热榜、分发业务逻辑
     src/models/                Sequelize 模型
     src/config/schema.sql      MySQL 表结构
+  scripts/smoke-e2e.js         端到端冒烟验证脚本
   docs/                        架构、规则、评估与交付文档
 ```
 
@@ -109,6 +112,7 @@ pnpm dev
 pnpm run typecheck
 pnpm run build
 pnpm run test
+pnpm run smoke:e2e
 ```
 
 后端也可以单独做语法检查和单元测试：
@@ -123,6 +127,7 @@ pnpm --dir ai-creator-backend run test
 - [系统架构设计](docs/architecture.md)
 - [内容安全审核规则与质量评估体系](docs/safety-quality-rules.md)
 - [效果评估与内容分发优化报告](docs/evaluation-report.md)
+- [部署与验收说明](docs/deployment-and-qa.md)
 
 ## 部署建议
 

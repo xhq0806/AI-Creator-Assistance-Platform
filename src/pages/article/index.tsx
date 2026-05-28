@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Descriptions, Image, Spin, Tag, Typography, message } from 'antd';
+import { Button, Card, Descriptions, Image, List, Popconfirm, Space, Spin, Tag, Typography, message } from 'antd';
 import { history, useModel, useParams } from 'umi';
 import RichText from '@/components/RichText';
-import { fetchArticle, type HotArticle } from '@/services/api';
+import {
+  fetchArticle,
+  fetchArticleVersions,
+  restoreArticleVersion,
+  sendArticleFeedback,
+  withdrawArticle,
+  type ArticleVersion,
+  type HotArticle,
+} from '@/services/api';
 import styles from './index.less';
 
 function createFallbackCover(title: string) {
@@ -18,7 +26,7 @@ function createFallbackCover(title: string) {
 }
 
 type ArticleDetail = HotArticle & {
-  status: 'draft' | 'pending_review' | 'published' | 'rejected';
+  status: 'draft' | 'pending_review' | 'published' | 'rejected' | 'withdrawn';
   media_urls?: string[];
 };
 
@@ -26,6 +34,7 @@ export default function ArticlePage() {
   const params = useParams();
   const { currentUser } = useModel('auth');
   const [article, setArticle] = useState<ArticleDetail>();
+  const [versions, setVersions] = useState<ArticleVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [messageApi, contextHolder] = message.useMessage();
 
@@ -44,6 +53,24 @@ export default function ArticlePage() {
     void loadArticle();
   }, [params.id]);
 
+  useEffect(() => {
+    async function loadVersions() {
+      if (!article || currentUser?.id !== article.user_id) {
+        setVersions([]);
+        return;
+      }
+
+      try {
+        const data = await fetchArticleVersions(article.id);
+        setVersions(data);
+      } catch (error) {
+        messageApi.warning(error instanceof Error ? error.message : '版本记录加载失败');
+      }
+    }
+
+    void loadVersions();
+  }, [article?.id, currentUser?.id]);
+
   if (loading) {
     return <Spin />;
   }
@@ -52,7 +79,42 @@ export default function ArticlePage() {
     return <Card>文章不存在</Card>;
   }
 
-  const canEdit = currentUser?.id === article.user_id;
+  const currentArticle = article;
+  const canEdit = currentUser?.id === currentArticle.user_id;
+
+  async function handleFeedback(type: 'like' | 'favorite' | 'negative') {
+    try {
+      const updated = await sendArticleFeedback(currentArticle.id, type);
+      setArticle(updated);
+      messageApi.success(type === 'negative' ? '已收到反馈' : '反馈成功');
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '反馈失败');
+    }
+  }
+
+  async function handleWithdraw() {
+    try {
+      const updated = await withdrawArticle(currentArticle.id);
+      setArticle(updated);
+      const data = await fetchArticleVersions(currentArticle.id);
+      setVersions(data);
+      messageApi.success('文章已撤回并从热榜移除');
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '撤回失败');
+    }
+  }
+
+  async function handleRestore(versionId: number) {
+    try {
+      const restored = await restoreArticleVersion(currentArticle.id, versionId);
+      setArticle(restored);
+      const data = await fetchArticleVersions(currentArticle.id);
+      setVersions(data);
+      messageApi.success('已回滚为草稿，可进入工作台继续编辑后发布');
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '回滚失败');
+    }
+  }
 
   return (
     <div className={styles.detail}>
@@ -73,6 +135,11 @@ export default function ArticlePage() {
           {article.created_at ? new Date(article.created_at).toLocaleString() : '-'}
         </Typography.Paragraph>
         <RichText className={styles.content} content={article.content} />
+        <Space wrap>
+          <Button onClick={() => handleFeedback('like')}>点赞 {article.like_count}</Button>
+          <Button onClick={() => handleFeedback('favorite')}>收藏 {article.favorite_count}</Button>
+          <Button onClick={() => handleFeedback('negative')}>不感兴趣 {article.negative_count}</Button>
+        </Space>
       </Card>
       <Card className={styles.metaCard} title="内容数据">
         <Descriptions column={1} size="small">
@@ -81,14 +148,48 @@ export default function ArticlePage() {
           </Descriptions.Item>
           <Descriptions.Item label="质量分">{article.quality_score}</Descriptions.Item>
           <Descriptions.Item label="阅读量">{article.view_count}</Descriptions.Item>
+          <Descriptions.Item label="正向反馈">{article.like_count + article.favorite_count}</Descriptions.Item>
+          <Descriptions.Item label="负反馈">{article.negative_count}</Descriptions.Item>
           <Descriptions.Item label="热度">{article.score?.toFixed ? article.score.toFixed(2) : '-'}</Descriptions.Item>
         </Descriptions>
         {canEdit && (
-          <Button type="primary" block style={{ marginTop: 16 }} onClick={() => history.push(`/creator/${article.id}`)}>
-            二次编辑
-          </Button>
+          <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+            <Button type="primary" block onClick={() => history.push(`/creator/${article.id}`)}>
+              二次编辑
+            </Button>
+            {article.status === 'published' ? (
+              <Popconfirm title="撤回后文章将从热榜移除，确定继续？" onConfirm={handleWithdraw}>
+                <Button block danger>
+                  撤回文章
+                </Button>
+              </Popconfirm>
+            ) : null}
+          </Space>
         )}
       </Card>
+      {canEdit ? (
+        <Card className={styles.metaCard} title="版本记录">
+          <List
+            size="small"
+            dataSource={versions}
+            locale={{ emptyText: '暂无版本记录' }}
+            renderItem={(version) => (
+              <List.Item
+                actions={[
+                  <Popconfirm key="restore" title={`回滚到版本 ${version.version_no}？`} onConfirm={() => handleRestore(version.id)}>
+                    <Button size="small">回滚</Button>
+                  </Popconfirm>,
+                ]}
+              >
+                <List.Item.Meta
+                  title={`v${version.version_no} · ${version.source}`}
+                  description={`${version.created_at ? new Date(version.created_at).toLocaleString() : '-'} · ${version.title}`}
+                />
+              </List.Item>
+            )}
+          />
+        </Card>
+      ) : null}
     </div>
   );
 }

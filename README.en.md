@@ -1,6 +1,6 @@
 # AI Creator Production and Distribution Platform
 
-An AIGC workflow platform for creators. It covers account management, AI-assisted article generation, visual cover generation, material management, content safety review, quality scoring, auto-save, offline draft recovery, post-publish editing, ranked feeds, article consumption, and simulated distribution.
+An AIGC workflow platform for creators. It covers account management, AI-assisted article generation, visual cover generation, prompt and material management, content safety review, quality scoring, auto-save, offline draft recovery, post-publish editing, version rollback, content withdrawal, ranked feeds, reader feedback, article consumption, and simulated distribution.
 
 ## Stack
 
@@ -48,6 +48,7 @@ admin / admin123
 pnpm run typecheck
 pnpm run build
 pnpm run test
+pnpm run smoke:e2e
 ```
 
 ## Documentation
@@ -55,3 +56,4 @@ pnpm run test
 - [Architecture](docs/architecture.md)
 - [Safety and Quality Rules](docs/safety-quality-rules.md)
 - [Evaluation Report](docs/evaluation-report.md)
+- [Deployment and QA](docs/deployment-and-qa.md)
