@@ -5,6 +5,7 @@
     "dev": "umi dev",
     "build": "umi build",
     "typecheck": "tsc --noEmit",
+    "test": "pnpm run typecheck && pnpm --dir ai-creator-backend run check && pnpm --dir ai-creator-backend run test",
     "postinstall": "umi setup",
     "setup": "umi setup",
     "start": "npm run dev",

@@ -1,36 +1,57 @@
-# AICD_Platfrom
+# AI Creator Production and Distribution Platform
 
-#### Description
-{**When you're done, you can delete the content in this README and update the file with details for others getting started with your repository**}
+An AIGC workflow platform for creators. It covers account management, AI-assisted article generation, visual cover generation, material management, content safety review, quality scoring, auto-save, offline draft recovery, post-publish editing, ranked feeds, article consumption, and simulated distribution.
 
-#### Software Architecture
-Software architecture description
+## Stack
 
-#### Installation
+- Frontend: React 18, TypeScript, Umi 4, Ant Design, localForage.
+- Backend: Node.js, Express 5, Sequelize, JWT, bcryptjs.
+- Data: MySQL for durable data, Redis for rate limiting, article cache, and hot ranking.
+- AI: OpenAI-compatible SDK with ModelScope or Volcengine Ark. Local fallbacks keep the demo runnable when no API token is configured.
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## Run Locally
 
-#### Instructions
+```bash
+pnpm install
+pnpm --dir ai-creator-backend install
+```
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+Create the MySQL database:
 
-#### Contribution
+```sql
+CREATE DATABASE IF NOT EXISTS ai_creator DEFAULT CHARACTER SET utf8mb4;
+```
 
-1.  Fork the repository
-2.  Create Feat_xxx branch
-3.  Commit your code
-4.  Create Pull Request
+Copy `ai-creator-backend/.env.example` to `ai-creator-backend/.env`, then adjust MySQL, Redis, JWT, and AI provider settings.
 
+Start the backend:
 
-#### Gitee Feature
+```bash
+pnpm backend:dev
+```
 
-1.  You can use Readme\_XXX.md to support different languages, such as Readme\_en.md, Readme\_zh.md
-2.  Gitee blog [blog.gitee.com](https://blog.gitee.com)
-3.  Explore open source project [https://gitee.com/explore](https://gitee.com/explore)
-4.  The most valuable open source project [GVP](https://gitee.com/gvp)
-5.  The manual of Gitee [https://gitee.com/help](https://gitee.com/help)
-6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+Start the frontend:
+
+```bash
+pnpm dev
+```
+
+Default local account:
+
+```text
+admin / admin123
+```
+
+## Verification
+
+```bash
+pnpm run typecheck
+pnpm run build
+pnpm run test
+```
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Safety and Quality Rules](docs/safety-quality-rules.md)
+- [Evaluation Report](docs/evaluation-report.md)

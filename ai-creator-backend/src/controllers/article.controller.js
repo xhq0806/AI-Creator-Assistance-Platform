@@ -1,5 +1,6 @@
 const { Article, User } = require('../models');
 const { auditContent, evaluateQuality } = require('../services/ai.service');
+const { normalizeDraftForSync, isMeaningfulDraftPayload } = require('../services/draft-sync.service');
 const { calculateHotScore, refreshArticleRank } = require('../services/ranking.service');
 const { ok } = require('../utils/apiResponse');
 
@@ -77,28 +78,34 @@ async function upsertDraft(req, res, next) {
 async function syncDrafts(req, res, next) {
   try {
     const drafts = Array.isArray(req.body.drafts) ? req.body.drafts : [];
-    let synced = 0;
+    const results = [];
 
     for (const draft of drafts) {
-      const title = draft.title || '未命名草稿';
-      const content = draft.content || '';
-      if (!content.trim() && title === '未命名草稿' && !(draft.media_urls || []).length) {
+      const payload = normalizeDraftForSync(draft, req.user.id);
+      if (!isMeaningfulDraftPayload(payload)) {
+        results.push({
+          localId: draft.localId,
+          skipped: true,
+          reason: 'empty_draft',
+        });
         continue;
       }
 
-      const savedArticle = await Article.create({
-        user_id: req.user.id,
-        title,
-        content,
-        media_urls: draft.media_urls || [],
-        status: 'draft',
-        quality_score: 0,
-      });
+      const existedArticle = draft.id ? await Article.findOne({ where: { id: draft.id, user_id: req.user.id } }) : null;
+      const savedArticle = existedArticle ? await existedArticle.update(payload) : await Article.create(payload);
+
       await refreshArticleRank(savedArticle);
-      synced += 1;
+      results.push({
+        localId: draft.localId,
+        serverId: Number(savedArticle.id),
+        action: existedArticle ? 'updated' : 'created',
+      });
     }
 
-    return ok(res, { synced });
+    return ok(res, {
+      synced: results.filter((item) => !item.skipped).length,
+      results,
+    });
   } catch (error) {
     return next(error);
   }

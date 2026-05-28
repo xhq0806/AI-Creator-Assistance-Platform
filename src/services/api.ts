@@ -34,6 +34,17 @@ export type HotArticle = Required<Pick<ArticleDraft, 'id' | 'title' | 'content'>
   score: number;
 };
 
+export type OfflineDraftSyncResult = {
+  synced: number;
+  results: {
+    localId?: string;
+    serverId?: number;
+    action?: 'created' | 'updated';
+    skipped?: boolean;
+    reason?: string;
+  }[];
+};
+
 async function requestJson<T>(url: string, options: RequestInit & { data?: unknown; params?: Record<string, unknown> } = {}) {
   const rawUser = window.localStorage.getItem('ai_creator_user');
   const token = rawUser ? (JSON.parse(rawUser) as CurrentUser).token : '';
@@ -143,8 +154,8 @@ export async function fetchArticle(id: number) {
   return response.data;
 }
 
-export async function syncOfflineDrafts(payload: ArticleDraft[]) {
-  const response = await requestJson<{ synced: number }>('/api/v1/articles/drafts/sync', {
+export async function syncOfflineDrafts(payload: (ArticleDraft & { localId?: string })[]) {
+  const response = await requestJson<OfflineDraftSyncResult>('/api/v1/articles/drafts/sync', {
     method: 'POST',
     data: { drafts: payload },
   });

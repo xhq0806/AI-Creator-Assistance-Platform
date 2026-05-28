@@ -190,7 +190,11 @@ export default function CreatorPage() {
     }
 
     const result = await syncOfflineDrafts(dirtyDrafts);
-    await Promise.all(dirtyDrafts.map((draft) => markDraftSynced(draft.localId, draft.id)));
+    await Promise.all(
+      result.results
+        .filter((item) => item.localId && !item.skipped)
+        .map((item) => markDraftSynced(item.localId as string, item.serverId)),
+    );
     messageApi.success(`已静默同步 ${result.synced} 份离线草稿`);
   }
 
