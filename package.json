@@ -1,0 +1,26 @@
+{
+  "private": true,
+  "author": "xqqbka <18656855963@163.com>",
+  "scripts": {
+    "dev": "umi dev",
+    "build": "umi build",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "umi setup",
+    "setup": "umi setup",
+    "start": "npm run dev",
+    "backend:dev": "pnpm --dir ai-creator-backend dev",
+    "backend:start": "pnpm --dir ai-creator-backend start"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.6.1",
+    "@umijs/plugins": "^4.6.55",
+    "antd": "^5.27.6",
+    "localforage": "^1.10.0",
+    "umi": "^4.6.55"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.33",
+    "@types/react-dom": "^18.0.11",
+    "typescript": "^5.0.3"
+  }
+}

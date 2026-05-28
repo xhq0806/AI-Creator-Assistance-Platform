@@ -1,0 +1,133 @@
+.workspace {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: calc(100vh - 64px);
+  padding: 48px 16px;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  width: min(1180px, calc((100vw - 32px) / 1.25));
+  margin: 0 auto;
+  transform: scale(1.25);
+  transform-origin: center;
+}
+
+.editorCard,
+.sideCard {
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 18px 60px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(18px) saturate(130%);
+}
+
+.editorCard :global(.ant-card-body),
+.sideCard :global(.ant-card-body) {
+  background: transparent;
+}
+
+.sideCard :global(.ant-card-head) {
+  background: rgba(255, 255, 255, 0.18);
+  border-bottom-color: rgba(255, 255, 255, 0.24);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.auditResult {
+  margin-top: 16px;
+}
+
+.richEditor {
+  height: 430px;
+  padding: 8px 11px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  color: #1f2937;
+  line-height: 1.7;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.richEditor:focus {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(5, 145, 255, 0.1);
+}
+
+.richEditor:empty::before {
+  color: #bfbfbf;
+  content: attr(data-placeholder);
+}
+
+.richEditor p {
+  margin: 0 0 10px;
+  word-break: break-word;
+}
+
+.richEditor strong {
+  font-weight: 700;
+}
+
+.promptList {
+  width: 100%;
+}
+
+.promptList :global(.ant-space-item) {
+  width: 100%;
+  min-width: 0;
+}
+
+.promptButton {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+}
+
+.promptButton span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.materialPreview {
+  width: 100%;
+  max-height: 120px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+
+@media (max-width: 960px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+    width: min(720px, 100%);
+    transform: none;
+  }
+}

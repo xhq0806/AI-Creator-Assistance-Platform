@@ -1,0 +1,27 @@
+.loginPage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 64px);
+  padding: 48px 16px;
+}
+
+.loginCard {
+  width: min(420px, 100%);
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(18px) saturate(130%);
+  transform: scale(1.5);
+  transform-origin: center;
+}
+
+.loginCard :global(.ant-card-body) {
+  background: transparent;
+}
+
+@media (max-width: 760px) {
+  .loginCard {
+    transform: none;
+  }
+}
