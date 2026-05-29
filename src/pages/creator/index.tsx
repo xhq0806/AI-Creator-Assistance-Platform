@@ -36,6 +36,7 @@ import {
   fetchPromptTemplates,
   generateContent,
   generateImage,
+  generateVideo,
   getUploadCredential,
   confirmUpload,
   markPromptTemplateUsed,
@@ -160,6 +161,18 @@ function RichContentEditor({
   );
 }
 
+function isVideoUrl(url: string) {
+  return url.startsWith("data:video/") || /\.(mp4|mov|webm)(\?|$)/i.test(url);
+}
+
+function isImageUrl(url: string) {
+  return (
+    url.startsWith("data:image/") ||
+    /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url) ||
+    (/^https?:\/\//i.test(url) && !isVideoUrl(url))
+  );
+}
+
 export default function CreatorPage() {
   const params = useParams();
   const location = useLocation();
@@ -170,6 +183,7 @@ export default function CreatorPage() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [generatingVideo, setGeneratingVideo] = useState(false);
   const [auditing, setAuditing] = useState(false);
   const [scoring, setScoring] = useState(false);
   const [auditResult, setAuditResult] = useState<AuditResult>();
@@ -434,8 +448,12 @@ export default function CreatorPage() {
 
   async function handleGenerateImage() {
     const values = form.getFieldsValue();
-    const prompt = values.prompt || values.title || values.content;
-    if (!prompt) {
+    const hasPrompt = Boolean(
+      String(values.prompt || "").trim() ||
+        String(values.title || "").trim() ||
+        String(values.content || "").trim()
+    );
+    if (!hasPrompt) {
       messageApi.warning("请先输入创作提示词、标题或正文");
       return;
     }
@@ -443,7 +461,44 @@ export default function CreatorPage() {
     setGeneratingImage(true);
     try {
       const result = await generateImage({
-        prompt,
+        prompt: values.prompt,
+        title: values.title,
+        content: values.content,
+        materials: mediaUrls,
+      });
+      setMediaUrls(result.media_urls);
+      if (result.provider === "placeholder") {
+        messageApi.warning(
+          "当前为占位图（未配置文生图 API），请在服务端配置 ARK_API_KEY 与 ARK_IMAGE_MODEL"
+        );
+      } else {
+        messageApi.success("AI 配图已生成");
+      }
+    } catch (error) {
+      messageApi.error(
+        error instanceof Error ? error.message : "AI 配图生成失败"
+      );
+    } finally {
+      setGeneratingImage(false);
+    }
+  }
+
+  async function handleGenerateVideo() {
+    const values = form.getFieldsValue();
+    const hasPrompt = Boolean(
+      String(values.prompt || "").trim() ||
+        String(values.title || "").trim() ||
+        String(values.content || "").trim()
+    );
+    if (!hasPrompt) {
+      messageApi.warning("请先输入创作提示词、标题或正文");
+      return;
+    }
+
+    setGeneratingVideo(true);
+    try {
+      const result = await generateVideo({
+        prompt: values.prompt,
         title: values.title,
         content: values.content,
         materials: mediaUrls,
@@ -451,13 +506,13 @@ export default function CreatorPage() {
       setMediaUrls((current) =>
         Array.from(new Set([...result.media_urls, ...current]))
       );
-      messageApi.success("AI 配图已生成并加入素材列表");
+      messageApi.success("AI 视频已生成并加入素材列表");
     } catch (error) {
       messageApi.error(
-        error instanceof Error ? error.message : "AI 配图生成失败"
+        error instanceof Error ? error.message : "AI 视频生成失败"
       );
     } finally {
-      setGeneratingImage(false);
+      setGeneratingVideo(false);
     }
   }
 
@@ -668,6 +723,9 @@ export default function CreatorPage() {
             <Button loading={generatingImage} onClick={handleGenerateImage}>
               生成配图
             </Button>
+            <Button loading={generatingVideo} onClick={handleGenerateVideo}>
+              生成视频
+            </Button>
             <Button
               icon={<SafetyCertificateOutlined />}
               loading={auditing}
@@ -728,7 +786,7 @@ export default function CreatorPage() {
         </Card>
 
         <Space direction="vertical" size={16}>
-          <Card className={styles.sideCard} title="Prompt 管理">
+          <Card className={styles.sideCard} title="提示词管理">
             <Space.Compact style={{ width: "100%", marginBottom: 8 }}>
               <Input
                 value={promptName}
@@ -954,10 +1012,8 @@ export default function CreatorPage() {
                   }}
                 >
                   {mediaUrls.map((url) => {
-                    const isImage =
-                      url.startsWith("data:image/") ||
-                      url.startsWith("http://") ||
-                      url.startsWith("https://");
+                    const isVideo = isVideoUrl(url);
+                    const isImage = isImageUrl(url);
                     return (
                       <div
                         key={url}
@@ -973,6 +1029,17 @@ export default function CreatorPage() {
                           <img
                             src={url}
                             alt="素材图片"
+                            style={{
+                              width: "100%",
+                              height: "auto",
+                              maxHeight: "220px",
+                              objectFit: "contain",
+                            }}
+                          />
+                        ) : isVideo ? (
+                          <video
+                            src={url}
+                            controls
                             style={{
                               width: "100%",
                               height: "auto",

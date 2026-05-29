@@ -20,6 +20,15 @@ async function generateImage(req, res, next) {
   }
 }
 
+async function generateVideo(req, res, next) {
+  try {
+    const result = await aiService.generateVideo(req.body);
+    return ok(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 async function audit(req, res, next) {
   try {
     const result = await aiService.auditContent(req.body);
@@ -48,6 +57,7 @@ async function quality(req, res, next) {
 module.exports = {
   generate,
   generateImage,
+  generateVideo,
   audit,
   quality,
 };

@@ -1,12 +1,7 @@
-const OpenAI = require("openai");
-const {
-  createOpenAIClient,
-  resolveProviderConfig,
-} = require("../utils/openaiClient");
 const { aiProvider, aiTimeoutMs, ark, modelscope } = require("../config/env");
 
-const client = createOpenAIClient();
-const provider = resolveProviderConfig();
+const IMAGE_STYLE_SUFFIX =
+  "写实摄影风格，自然光线，画面无文字、无水印、无海报排版，适合作为文章配图。";
 
 const auditSystemPrompt = `你是企业级内容安全审核引擎。请从涉黄、涉赌、涉毒、政治敏感、暴力恐怖、个人隐私泄露、未成年人风险、虚假夸大营销八个维度审核用户文本。
 必须只返回严格 JSON，不要使用 Markdown。
@@ -48,18 +43,28 @@ function safeJsonParse(raw) {
   }
 }
 
+function isLikelyImageUrl(url) {
+  const value = String(url || "");
+  if (value.startsWith("data:image/")) {
+    return true;
+  }
+  if (/\.(png|jpe?g|gif|webp|bmp|svg|mp4|mov|webm)(\?|$)/i.test(value)) {
+    return true;
+  }
+  // 火山方舟 / 豆包对话生图返回的签名 CDN 链接通常无文件后缀
+  if (/byteimg\.com|volces\.com|volccdn\.com|tos-cn-|ark-project\./i.test(value)) {
+    return true;
+  }
+  return false;
+}
+
 function extractMediaUrlsFromText(raw) {
   const text = String(raw || "");
   const dataUrls =
-    text.match(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g) || [];
-  const httpUrls = text.match(/https?:\/\/[^\s"'<>，。)）]+/g) || [];
+    text.match(/data:(?:image|video)\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g) || [];
+  const httpUrls = text.match(/https?:\/\/[^\s"'<>，。)）\]]+/g) || [];
 
-  return [...dataUrls, ...httpUrls].filter(
-    (url) =>
-      /^(data:image\/|https?:\/\/).+\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i.test(
-        url
-      ) || url.startsWith("data:image/")
-  );
+  return [...dataUrls, ...httpUrls].filter(isLikelyImageUrl);
 }
 
 function extractMediaUrlsFromMessage(message) {
@@ -96,7 +101,125 @@ function extractMediaUrlsFromMessage(message) {
   return [];
 }
 
-function createFallbackCoverDataUrl({ title, prompt }) {
+function extractTextFromResponse(payload) {
+  if (typeof payload?.output_text === "string") {
+    return payload.output_text;
+  }
+
+  const outputItems = Array.isArray(payload?.output) ? payload.output : [];
+  const textParts = outputItems.flatMap((item) => {
+    if (typeof item?.content === "string") {
+      return [item.content];
+    }
+    if (!Array.isArray(item?.content)) {
+      return [];
+    }
+    return item.content
+      .map((part) => part.text || part.output_text || part.content || "")
+      .filter(Boolean);
+  });
+
+  if (textParts.length) {
+    return textParts.join("\n");
+  }
+
+  return payload?.choices?.[0]?.message?.content || "";
+}
+
+function extractMediaUrlsFromResponse(payload) {
+  const urls = [];
+  const pushUrl = (value) => {
+    if (typeof value === "string") {
+      urls.push(...extractMediaUrlsFromText(value));
+    }
+  };
+
+  pushUrl(payload?.output_text);
+  pushUrl(payload?.choices?.[0]?.message?.content);
+
+  const outputItems = Array.isArray(payload?.output) ? payload.output : [];
+  outputItems.forEach((item) => {
+    pushUrl(item?.content);
+    if (Array.isArray(item?.content)) {
+      item.content.forEach((part) => {
+        pushUrl(part?.text || part?.output_text || part?.content);
+        pushUrl(part?.image_url?.url || part?.image_url || part?.video_url?.url || part?.video_url);
+        pushUrl(part?.url);
+      });
+    }
+  });
+
+  return Array.from(new Set(urls.filter(Boolean)));
+}
+
+function buildResponseInput(messages) {
+  return messages.map((message) => ({
+    role: message.role === "system" ? "user" : message.role,
+    content: [
+      {
+        type: "input_text",
+        text: String(message.content || ""),
+      },
+    ],
+  }));
+}
+
+async function callArkResponses({ model, input, instructions, extra = {} }) {
+  if (!ark.apiKey) {
+    throw new Error("未配置 ARK_API_KEY");
+  }
+
+  const baseURL = String(ark.baseURL || "").replace(/\/$/, "");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), aiTimeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${baseURL}/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ark.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        ...(instructions ? { instructions } : {}),
+        input,
+        ...extra,
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail =
+      payload?.error?.message ||
+      payload?.message ||
+      `HTTP ${response.status}`;
+    throw new Error(`火山方舟 REST API 调用失败：${detail}`);
+  }
+
+  return payload;
+}
+
+function buildScenePrompt({ prompt, title, content }) {
+  const scene = String(prompt || "").trim();
+  if (scene) {
+    return `${scene}。${IMAGE_STYLE_SUFFIX}`;
+  }
+
+  const theme = String(title || "").trim() || String(content || "").trim().slice(0, 160);
+  if (theme) {
+    return `根据文章主题绘制配图：${theme}。${IMAGE_STYLE_SUFFIX}`;
+  }
+
+  return `宁静的自然风景摄影。${IMAGE_STYLE_SUFFIX}`;
+}
+
+function createPlaceholderCover({ title, prompt, reason }) {
   const sceneSeed = Buffer.from(String(prompt || title || "nature"))
     .toString("hex")
     .slice(0, 16);
@@ -104,7 +227,225 @@ function createFallbackCoverDataUrl({ title, prompt }) {
     media_urls: [`https://picsum.photos/seed/${sceneSeed}/1200/675`],
     cover_prompt: prompt || title || "AI 生成配图",
     alt_text: title || "AI 场景图片",
+    provider: "placeholder",
+    placeholder_reason: reason,
   };
+}
+
+function normalizeArkImageError(message) {
+  const text = String(message || "");
+  if (/custom endpoint ID/i.test(text)) {
+    return "火山方舟文生图需使用推理接入点 ID（ep- 开头）。请在控制台创建 Seedream 文生图接入点，并将 ARK_IMAGE_MODEL 设为该 ID。";
+  }
+  if (/only supported by certain models/i.test(text)) {
+    return "当前接入点不支持 /images/generations。若使用 doubao-seed-2.0-lite，请保持 ARK_IMAGE_MODEL 与 ARK_MODEL 相同（ep- 开头），系统将自动走对话生图。";
+  }
+  return text;
+}
+
+function shouldUseArkChatImage(modelId) {
+  const model = String(modelId || "");
+  return ark.imageApi === "responses" || model.startsWith("ep-");
+}
+
+async function generateImageWithArkChat(imagePrompt, { title }) {
+  const payload = await callArkResponses({
+    model: ark.imageModel || ark.textModel,
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: `请生成一张与以下描述高度一致的写实配图，画面中不要出现任何文字或水印：\n${imagePrompt}`,
+          },
+        ],
+      },
+    ],
+  });
+  const urls = extractMediaUrlsFromResponse(payload);
+  if (!urls.length) {
+    throw new Error("模型未返回可用图片地址，请稍后重试");
+  }
+
+  const reachable = await filterReachableImageUrls(urls);
+  const media_urls = reachable.length ? reachable : urls;
+
+  return {
+    media_urls,
+    cover_prompt: imagePrompt,
+    alt_text: title || "AI 场景图片",
+    provider: "ark-responses",
+  };
+}
+
+async function pollModelScopeImageTask(taskId) {
+  const baseURL = String(modelscope.baseURL || "").replace(/\/$/, "");
+  const maxAttempts = Math.max(6, Math.ceil(aiTimeoutMs / 5000));
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+
+    const response = await fetch(`${baseURL}/tasks/${taskId}`, {
+      headers: {
+        Authorization: `Bearer ${modelscope.apiKey}`,
+        "X-ModelScope-Task-Type": "image_generation",
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+    const status = String(
+      payload.task_status || payload.output?.task_status || ""
+    ).toUpperCase();
+
+    if (status === "SUCCEED" || status === "SUCCEEDED") {
+      return (payload.output_images || [])
+        .concat(
+          (payload.output?.images || []).map((item) => item.url).filter(Boolean)
+        )
+        .filter(Boolean);
+    }
+
+    if (status === "FAILED" || status === "FAILURE") {
+      throw new Error(payload.message || "ModelScope 文生图任务失败");
+    }
+  }
+
+  throw new Error("ModelScope 文生图超时，请稍后重试");
+}
+
+async function generateImageWithModelScope(imagePrompt, { title }) {
+  if (!modelscope.apiKey) {
+    throw new Error("未配置 MODELSCOPE_API_TOKEN");
+  }
+
+  const baseURL = String(modelscope.baseURL || "").replace(/\/$/, "");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), aiTimeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${baseURL}/images/generations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${modelscope.apiKey}`,
+        "X-ModelScope-Async-Mode": "true",
+      },
+      body: JSON.stringify({
+        model: modelscope.imageModel,
+        prompt: imagePrompt,
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || `ModelScope 文生图提交失败(${response.status})`);
+  }
+
+  let urls = Array.isArray(payload.output_images) ? payload.output_images : [];
+  if (!urls.length) {
+    const taskId = payload.task_id || payload.data?.task_id;
+    if (!taskId) {
+      throw new Error("ModelScope 未返回任务 ID 或图片地址");
+    }
+    urls = await pollModelScopeImageTask(taskId);
+  }
+
+  const reachable = await filterReachableImageUrls(urls);
+  if (!reachable.length) {
+    throw new Error("ModelScope 文生图结果不可访问");
+  }
+
+  return {
+    media_urls: reachable,
+    cover_prompt: imagePrompt,
+    alt_text: title || "AI 场景图片",
+    provider: "modelscope",
+  };
+}
+
+async function generateImageWithArkImagesApi(imagePrompt, { title }) {
+  const baseURL = String(ark.baseURL || "").replace(/\/$/, "");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), aiTimeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${baseURL}/images/generations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ark.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: ark.imageModel,
+        prompt: imagePrompt,
+        size: "1280x720",
+        response_format: "url",
+        watermark: false,
+        sequential_image_generation: "disabled",
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail =
+      payload?.error?.message ||
+      payload?.message ||
+      `HTTP ${response.status}`;
+    throw new Error(normalizeArkImageError(`火山方舟文生图失败：${detail}`));
+  }
+
+  const urls = (payload.data || [])
+    .map((item) => item?.url)
+    .filter(Boolean);
+
+  if (!urls.length) {
+    throw new Error("文生图接口未返回图片地址");
+  }
+
+  const reachable = await filterReachableImageUrls(urls);
+  if (!reachable.length) {
+    throw new Error("文生图结果地址不可访问");
+  }
+
+  return {
+    media_urls: reachable,
+    cover_prompt: imagePrompt,
+    alt_text: title || "AI 场景图片",
+    provider: "ark-seedream",
+  };
+}
+
+async function generateImageWithArk(imagePrompt, { title }) {
+  if (!ark.apiKey) {
+    throw new Error("未配置 ARK_API_KEY，无法调用文生图");
+  }
+
+  const imageModel = ark.imageModel || ark.textModel;
+  if (shouldUseArkChatImage(imageModel)) {
+    return generateImageWithArkChat(imagePrompt, { title });
+  }
+
+  try {
+    return await generateImageWithArkImagesApi(imagePrompt, { title });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/only supported by certain models/i.test(message)) {
+      return generateImageWithArkChat(imagePrompt, { title });
+    }
+    throw error;
+  }
 }
 
 async function isReachableImageUrl(url) {
@@ -120,6 +461,10 @@ async function isReachableImageUrl(url) {
     return true;
   }
 
+  if (/byteimg\.com|volces\.com|volccdn\.com|tos-cn-|ark-project\./i.test(String(url))) {
+    return true;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 6000);
 
@@ -131,8 +476,12 @@ async function isReachableImageUrl(url) {
         "User-Agent": "AI-Creator-Platform/1.0",
       },
     });
-    const contentType = response.headers.get("content-type") || "";
-    return response.ok && contentType.toLowerCase().startsWith("image/");
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    const looksLikeImage =
+      contentType.startsWith("image/") ||
+      contentType === "application/octet-stream" ||
+      /\.(png|jpe?g|gif|webp)(\?|$)/i.test(String(url));
+    return response.ok && looksLikeImage;
   } catch {
     return false;
   } finally {
@@ -151,52 +500,40 @@ async function filterReachableImageUrls(urls) {
 }
 
 async function chatJson(messages, fallback) {
-  if (!client) {
-    console.log("[AI调用调试] client是空，直接返回兜底，没有请求任何API");
+  if (!ark.apiKey) {
+    console.log("[AI调用调试] 未配置 ARK_API_KEY，直接返回兜底");
     return fallback("missing_api_key");
   }
 
-  console.log("[AI调用调试] ====== 即将请求火山方舟API ======");
-  console.log("[AI调用调试] provider.name:", provider.name);
+  console.log("[AI调用调试] ====== 即将请求火山方舟 REST API ======");
   console.log("[AI调用调试] baseURL:", ark.baseURL);
-  console.log("[AI调用调试] model名称:", provider.model);
+  console.log("[AI调用调试] model名称:", ark.textModel);
   console.log(
     "[AI调用调试] APIKey前缀:",
     ark.apiKey ? ark.apiKey.slice(0, 12) + "..." : "空"
   );
 
-  const payload = {
-    model: provider.model,
-    temperature: 0.2,
-    messages,
-  };
-
-  let completion;
   try {
-    console.log("[AI调用调试] 开始调用client.chat.completions.create...");
-    completion = await client.chat.completions.create(payload);
+    const systemMessages = messages
+      .filter((message) => message.role === "system")
+      .map((message) => message.content)
+      .join("\n\n");
+    const userMessages = messages.filter((message) => message.role !== "system");
+    const payload = await callArkResponses({
+      model: ark.textModel,
+      instructions: systemMessages,
+      input: buildResponseInput(userMessages),
+      extra: { temperature: 0.2 },
+    });
     console.log("[AI调用调试] API调用成功！");
+    const contentText = extractTextFromResponse(payload);
+    console.log("[AI调用调试] 模型返回内容:", contentText);
+    const parsed = safeJsonParse(contentText);
+    return parsed || fallback("invalid_json", contentText);
   } catch (error) {
     console.log("[AI调用调试] API调用出错:", error.message);
-    if (
-      error.name === "APIConnectionTimeoutError" ||
-      error.status === 401 ||
-      error.status === 403
-    ) {
-      throw error;
-    }
-    completion = await client.chat.completions.create(payload);
+    throw error;
   }
-
-  console.log(
-    "[AI调用调试] 模型返回内容:",
-    completion.choices[0]?.message?.content
-  );
-  const message = completion.choices[0]?.message || {};
-  const contentText = message.content || message.reasoning_content || "";
-  const parsed = safeJsonParse(contentText);
-
-  return parsed || fallback("invalid_json", contentText);
 }
 
 async function generateContent({ prompt, mode, materials = [] }) {
@@ -204,8 +541,8 @@ async function generateContent({ prompt, mode, materials = [] }) {
     title: prompt.slice(0, 24) || "AI 创作草稿",
     content:
       reason === "missing_api_key"
-        ? `围绕「${prompt}」生成的内容草稿。当前未配置 ${provider.name} 模型密钥，系统已启用本地降级结果。`
-        : `围绕「${prompt}」生成的内容草稿。${provider.name} 模型已调用，但返回内容不是标准 JSON，系统已启用本地降级结果。`,
+        ? `围绕「${prompt}」生成的内容草稿。当前未配置火山方舟模型密钥，系统已启用本地降级结果。`
+        : `围绕「${prompt}」生成的内容草稿。火山方舟模型已调用，但返回内容不是标准 JSON，系统已启用本地降级结果。`,
     suggested_tags: ["AI", "创作"],
   });
 
@@ -232,8 +569,8 @@ async function auditContent({ title, content }) {
     risk_category: "",
     reason:
       reason === "missing_api_key"
-        ? `未配置 ${provider.name} 模型密钥，已使用本地兜底审核，未发现明显风险。`
-        : `${provider.name} 模型返回内容不是标准 JSON，已使用本地兜底审核，未发现明显风险。`,
+        ? "未配置火山方舟模型密钥，已使用本地兜底审核，未发现明显风险。"
+        : "火山方舟模型返回内容不是标准 JSON，已使用本地兜底审核，未发现明显风险。",
     accuracy: 0.7,
     safe_alternative: "",
   });
@@ -285,35 +622,86 @@ async function evaluateQuality({ title, content }) {
   };
 }
 
-async function generateImage({ prompt, title, content, materials = [] }) {
-  if (!client) {
-    return createFallbackCoverDataUrl({ title, prompt });
+async function generateImage({ prompt, title, content }) {
+  const imagePrompt = buildScenePrompt({ prompt, title, content });
+  const failures = [];
+
+  if (ark.apiKey && ark.imageModel) {
+    try {
+      return await generateImageWithArk(imagePrompt, { title });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(message);
+      console.error("[generateImage] Ark image API failed:", message);
+    }
   }
 
-  let userScenePrompt;
-  if (prompt && prompt.trim()) {
-    userScenePrompt = prompt.trim();
-  } else {
-    userScenePrompt = `请描绘一个与文章主题高度契合的真实自然场景，不要任何文字、不要任何海报元素、不要任何标题元素。文章主题：${
-      title || "未命名内容"
-    }`;
+  if (modelscope.apiKey) {
+    try {
+      return await generateImageWithModelScope(imagePrompt, { title });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(message);
+      console.error("[generateImage] ModelScope image API failed:", message);
+    }
   }
 
-  const finalSeedText = Buffer.from(userScenePrompt)
-    .toString("hex")
-    .slice(0, 16);
+  if (!ark.apiKey && !modelscope.apiKey) {
+    return createPlaceholderCover({
+      title,
+      prompt: imagePrompt,
+      reason: "missing_api_key",
+    });
+  }
+
+  throw new Error(failures.join("；") || "配图生成失败，请检查文生图 API 配置");
+}
+
+async function generateVideo({ prompt, title, content }) {
+  const videoPrompt = buildScenePrompt({ prompt, title, content }).replace(
+    "适合作为文章配图",
+    "适合作为短视频素材"
+  );
+
+  if (!ark.apiKey) {
+    throw new Error("未配置 ARK_API_KEY，无法生成视频");
+  }
+  if (!ark.videoModel) {
+    throw new Error("未配置 ARK_VIDEO_MODEL，无法生成视频");
+  }
+
+  const payload = await callArkResponses({
+    model: ark.videoModel,
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: `请根据以下描述生成一段短视频，画面不要出现文字或水印：\n${videoPrompt}`,
+          },
+        ],
+      },
+    ],
+  });
+  const mediaUrls = extractMediaUrlsFromResponse(payload);
+
+  if (!mediaUrls.length) {
+    throw new Error("模型未返回可用视频地址，请检查视频模型能力或稍后重试");
+  }
 
   return {
-    media_urls: [`https://picsum.photos/seed/${finalSeedText}/1200/675`],
-    cover_prompt: userScenePrompt,
-    alt_text: title || "AI 场景图片",
-    provider: provider.name,
+    media_urls: mediaUrls,
+    video_prompt: videoPrompt,
+    alt_text: title || "AI 视频素材",
+    provider: "ark-responses",
   };
 }
 
 module.exports = {
   generateContent,
   generateImage,
+  generateVideo,
   auditContent,
   evaluateQuality,
 };

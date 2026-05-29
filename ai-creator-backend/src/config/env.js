@@ -19,11 +19,16 @@ module.exports = {
     apiKey: process.env.MODELSCOPE_API_TOKEN || '',
     baseURL: process.env.MODELSCOPE_BASE_URL || 'https://api-inference.modelscope.cn/v1',
     textModel: process.env.MODELSCOPE_TEXT_MODEL || 'Qwen/Qwen3-235B-A22B-Instruct-2507',
+    imageModel: process.env.MODELSCOPE_IMAGE_MODEL || 'Qwen/Qwen-Image',
   },
   ark: {
     apiKey: process.env.ARK_API_KEY || '',
     baseURL: process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
-    model: process.env.ARK_MODEL || 'doubao-seed-1-6-250615',
+    textModel: process.env.ARK_TEXT_MODEL || process.env.ARK_MODEL || 'doubao-seed-2-0-lite-260428',
+    imageModel: process.env.ARK_IMAGE_MODEL || process.env.ARK_MODEL || '',
+    imageApi: process.env.ARK_IMAGE_API || 'responses',
+    videoModel: process.env.ARK_VIDEO_MODEL || '',
+    videoApi: process.env.ARK_VIDEO_API || 'responses',
   },
   cloud: {
     provider: process.env.CLOUD_PROVIDER || 'mock',

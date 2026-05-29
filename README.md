@@ -5,7 +5,7 @@
 ## 功能完成度
 
 - 用户中心：支持用户名、手机号、邮箱登录注册，JWT 认证和安全退出。
-- AI 创作：支持提示词模板管理、素材库管理、图文内容生成、AI 配图生成。
+- AI 创作：支持提示词模板管理、素材库管理、图文内容生成、Seedream 配图生成和视频生成入口。
 - 内容审核：发布前自动审核，风险内容驳回；编辑器侧支持一键应用合规替代文本。
 - 质量评分：支持编辑过程手动评分，发布时自动评分，质量分参与热榜排序。
 - 草稿体系：在线 30 秒自动保存；离线写作落 IndexedDB；网络恢复后增量同步并回写服务端 ID。
@@ -19,7 +19,7 @@
 - 前端：React 18、TypeScript、Umi 4、Ant Design、localForage。
 - 后端：Node.js、Express 5、Sequelize、JWT、bcryptjs。
 - 数据：MySQL 存储用户、文章、审核日志；Redis 支撑 AI 限流、文章热榜和文章缓存。
-- AI：OpenAI-compatible SDK，可接 ModelScope 或火山方舟；未配置密钥时使用本地降级结果保障演示可运行。
+- AI：火山方舟 REST API，文本/审核/评分走 `/responses`，配图走 Seedream `/images/generations`，视频生成预留 `/responses` 入口；未配置密钥时使用本地降级结果保障演示可运行。
 
 ## 目录结构
 
@@ -82,13 +82,17 @@ MYSQL_USER=root
 MYSQL_PASSWORD=
 REDIS_URL=redis://127.0.0.1:6379
 
-AI_PROVIDER=modelscope
-MODELSCOPE_API_TOKEN=
-MODELSCOPE_BASE_URL=https://api-inference.modelscope.cn/v1
-MODELSCOPE_TEXT_MODEL=Qwen/Qwen3-235B-A22B-Instruct-2507
+AI_PROVIDER=ark
+ARK_API_KEY=
+ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+ARK_TEXT_MODEL=doubao-seed-2-0-lite-260428
+ARK_IMAGE_MODEL=doubao-seedream-4-0-250828
+ARK_IMAGE_API=images
+ARK_VIDEO_MODEL=
+ARK_VIDEO_API=responses
 ```
 
-`MODELSCOPE_API_TOKEN` 留空时，AI 生成、审核、评分和配图都会走本地兜底逻辑，适合离线演示。
+`ARK_API_KEY` 留空时，AI 生成、审核、评分和配图会走本地兜底逻辑，适合离线演示。若使用 Seedream 专用图片模型，请保持 `ARK_IMAGE_API=images`。
 
 ### 4. 启动服务
 

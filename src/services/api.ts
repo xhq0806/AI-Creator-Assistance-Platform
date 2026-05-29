@@ -230,7 +230,27 @@ export async function generateImage(payload: {
     cover_prompt: string;
     alt_text: string;
     provider?: string;
+    placeholder_reason?: string;
   }>("/api/v1/ai/generate-image", {
+    method: "POST",
+    data: payload,
+  });
+
+  return response.data;
+}
+
+export async function generateVideo(payload: {
+  prompt?: string;
+  title?: string;
+  content?: string;
+  materials?: string[];
+}) {
+  const response = await requestJson<{
+    media_urls: string[];
+    video_prompt: string;
+    alt_text: string;
+    provider?: string;
+  }>("/api/v1/ai/generate-video", {
     method: "POST",
     data: payload,
   });

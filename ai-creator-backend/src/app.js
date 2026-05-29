@@ -39,6 +39,7 @@ app.post('/api/v1/auth/register', authController.register);
 
 app.post('/api/v1/ai/generate', requireAuth, aiRateLimiter(10), aiController.generate);
 app.post('/api/v1/ai/generate-image', requireAuth, aiRateLimiter(8), aiController.generateImage);
+app.post('/api/v1/ai/generate-video', requireAuth, aiRateLimiter(4), aiController.generateVideo);
 app.post('/api/v1/ai/audit', requireAuth, aiRateLimiter(20), aiController.audit);
 app.post('/api/v1/ai/quality', requireAuth, aiRateLimiter(20), aiController.quality);
 
