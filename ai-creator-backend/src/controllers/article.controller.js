@@ -1,5 +1,5 @@
-const { Article, User, ArticleVersion } = require('../models');
-const { auditContent, evaluateQuality } = require('../services/ai.service');
+const { Article, User, ArticleVersion, UserFeedback } = require('../models');
+const { auditContent, evaluateQuality, evaluateRankingPotential } = require('../services/ai.service');
 const { createArticleVersion, serializeArticleVersion } = require('../services/article-version.service');
 const { normalizeDraftForSync, isMeaningfulDraftPayload } = require('../services/draft-sync.service');
 const { calculateHotScore, refreshArticleRank } = require('../services/ranking.service');
@@ -13,6 +13,9 @@ function serializeArticle(article) {
     id: Number(payload.id),
     user_id: Number(payload.user_id),
     quality_score: Number(payload.quality_score || 0),
+    ai_rank_score: Number(payload.ai_rank_score || 0),
+    ai_rank_reason: payload.ai_rank_reason || '',
+    ai_rank_tags: payload.ai_rank_tags || [],
     like_count: Number(payload.like_count || 0),
     favorite_count: Number(payload.favorite_count || 0),
     negative_count: Number(payload.negative_count || 0),
@@ -30,22 +33,49 @@ function serializeArticle(article) {
 async function upsertDraft(req, res, next) {
   try {
     const userId = req.user.id;
-    const { id, title, content, media_urls = [], status = 'draft' } = req.body;
+    const { id, title, content, media_urls = [], status = 'draft', auto_fix = false } = req.body;
     let finalStatus = status;
     let auditResult;
+    let autoFixed = false;
+    let finalContent = content;
     let qualityScore = 0;
 
     const [article] = id
       ? await Promise.all([Article.findOne({ where: { id, user_id: userId } })])
       : [undefined];
+    let aiRankScore = Number(article?.ai_rank_score || 0);
+    let aiRankReason = article?.ai_rank_reason || '';
+    let aiRankTags = article?.ai_rank_tags || [];
 
     if (status === 'published') {
-      auditResult = await auditContent({ title, content });
-      const quality = await evaluateQuality({ title, content });
-      qualityScore = quality.quality_score;
+      auditResult = await auditContent({ title, content: finalContent });
       if (!auditResult.is_compliant) {
-        finalStatus = 'rejected';
+        const safeAlternative = String(auditResult.safe_alternative || '').trim();
+        if (auto_fix && safeAlternative) {
+          finalContent = safeAlternative;
+          const fixedAuditResult = await auditContent({ title, content: finalContent });
+          if (fixedAuditResult.is_compliant) {
+            auditResult = fixedAuditResult;
+            autoFixed = true;
+          } else {
+            auditResult = fixedAuditResult;
+            finalStatus = 'rejected';
+          }
+        } else {
+          finalStatus = 'rejected';
+        }
       }
+
+      const quality = await evaluateQuality({ title, content: finalContent });
+      qualityScore = quality.quality_score;
+      const ranking = await evaluateRankingPotential({
+        title,
+        content: finalContent,
+        quality_score: qualityScore,
+      });
+      aiRankScore = ranking.ai_rank_score;
+      aiRankReason = ranking.ranking_reason;
+      aiRankTags = ranking.topic_tags;
     } else {
       qualityScore = Number(article?.quality_score || 0);
     }
@@ -53,10 +83,13 @@ async function upsertDraft(req, res, next) {
     const payload = {
       user_id: userId,
       title,
-      content,
+      content: finalContent,
       media_urls,
       status: finalStatus,
       quality_score: qualityScore,
+      ai_rank_score: aiRankScore,
+      ai_rank_reason: aiRankReason,
+      ai_rank_tags: aiRankTags,
     };
 
     const savedArticle = article ? await article.update(payload) : await Article.create(payload);
@@ -74,7 +107,10 @@ async function upsertDraft(req, res, next) {
       });
     }
 
-    return ok(res, serializeArticle(savedArticle));
+    return ok(res, {
+      ...serializeArticle(savedArticle),
+      auto_fixed: autoFixed,
+    });
   } catch (error) {
     return next(error);
   }
@@ -256,7 +292,24 @@ async function feedback(req, res, next) {
       return res.status(404).json({ code: 404, message: '文章不存在或不可反馈' });
     }
 
-    await article.increment(field, { by: 1 });
+    const [feedback, created] = await UserFeedback.findOrCreate({
+      where: {
+        user_id: req.user.id,
+        article_id: article.id,
+        type: feedbackType,
+      },
+      defaults: {
+        user_id: req.user.id,
+        article_id: article.id,
+        type: feedbackType,
+      },
+    });
+
+    if (!created) {
+      await feedback.update({ updated_at: new Date() });
+    } else {
+      await article.increment(field, { by: 1 });
+    }
     await article.reload({ include: [{ model: User, attributes: ['id', 'username'] }] });
     await refreshArticleRank(article);
 

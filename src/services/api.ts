@@ -33,6 +33,9 @@ export type HotArticle = Required<
   updated_at?: string;
   view_count: number;
   quality_score: number;
+  ai_rank_score?: number;
+  ai_rank_reason?: string;
+  ai_rank_tags?: string[];
   like_count: number;
   favorite_count: number;
   negative_count: number;
@@ -259,7 +262,7 @@ export async function generateVideo(payload: {
 }
 
 export async function auditContent(
-  payload: Pick<ArticleDraft, "title" | "content">
+  payload: Pick<ArticleDraft, "title" | "content"> & { prompt?: string }
 ) {
   const response = await requestJson<AuditResult>("/api/v1/ai/audit", {
     method: "POST",
@@ -355,8 +358,8 @@ export async function deleteMaterial(id: number) {
   return response.data;
 }
 
-export async function saveDraft(payload: ArticleDraft) {
-  const response = await requestJson<ArticleDraft & { id: number }>(
+export async function saveDraft(payload: ArticleDraft & { auto_fix?: boolean }) {
+  const response = await requestJson<ArticleDraft & { id: number; auto_fixed?: boolean }>(
     "/api/v1/articles/draft",
     {
       method: "POST",
@@ -444,6 +447,52 @@ export async function sendArticleFeedback(
     method: "POST",
     data: { type },
   });
+
+  return response.data;
+}
+
+export async function fetchMyProfile() {
+  const response = await requestJson<Omit<CurrentUser, "token">>(
+    "/api/v1/users/me",
+    {
+      method: "GET",
+    }
+  );
+
+  return response.data;
+}
+
+export async function updateMyProfile(payload: {
+  username?: string;
+  phone?: string;
+  email?: string;
+}) {
+  const response = await requestJson<Omit<CurrentUser, "token">>(
+    "/api/v1/users/me",
+    {
+      method: "PUT",
+      data: payload,
+    }
+  );
+
+  return response.data;
+}
+
+export async function fetchMyArticles() {
+  const response = await requestJson<HotArticle[]>("/api/v1/users/me/articles", {
+    method: "GET",
+  });
+
+  return response.data;
+}
+
+export async function fetchMyFeedbackArticles(type: "like" | "favorite") {
+  const response = await requestJson<HotArticle[]>(
+    `/api/v1/users/me/feedback/${type}`,
+    {
+      method: "GET",
+    }
+  );
 
   return response.data;
 }

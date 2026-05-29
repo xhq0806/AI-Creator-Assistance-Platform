@@ -21,6 +21,19 @@ function readStoredUser() {
 export default function useAuthModel() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | undefined>(() => readStoredUser());
 
+  const updateCurrentUser = useCallback((payload: Partial<CurrentUser>) => {
+    flushSync(() => {
+      setCurrentUser((current) => {
+        if (!current) {
+          return current;
+        }
+        const nextUser = { ...current, ...payload };
+        window.localStorage.setItem('ai_creator_user', JSON.stringify(nextUser));
+        return nextUser;
+      });
+    });
+  }, []);
+
   const signIn = useCallback(async (account: string, password: string) => {
     const user = await login({ account, password });
     window.localStorage.setItem('ai_creator_user', JSON.stringify(user));
@@ -53,5 +66,6 @@ export default function useAuthModel() {
     signIn,
     signUp,
     signOut,
+    updateCurrentUser,
   };
 }

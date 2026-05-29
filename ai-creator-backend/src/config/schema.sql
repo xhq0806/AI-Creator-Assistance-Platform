@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS `articles` (
   `media_urls` JSON DEFAULT NULL,
   `status` ENUM('draft', 'pending_review', 'published', 'rejected', 'withdrawn') DEFAULT 'draft',
   `quality_score` DECIMAL(5,2) DEFAULT 0.00,
+  `ai_rank_score` DECIMAL(5,2) DEFAULT 0.00,
+  `ai_rank_reason` VARCHAR(512) DEFAULT '',
+  `ai_rank_tags` JSON DEFAULT NULL,
   `view_count` INT UNSIGNED DEFAULT 0,
   `like_count` INT UNSIGNED DEFAULT 0,
   `favorite_count` INT UNSIGNED DEFAULT 0,
@@ -23,7 +26,8 @@ CREATE TABLE IF NOT EXISTS `articles` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`),
-  INDEX `idx_quality_status` (`status`, `quality_score` DESC)
+  INDEX `idx_quality_status` (`status`, `quality_score` DESC),
+  INDEX `idx_ai_rank_status` (`status`, `ai_rank_score` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `prompt_teams` (

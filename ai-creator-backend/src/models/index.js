@@ -10,6 +10,7 @@ const PromptTeamMember = require('./prompt-team-member.model');
 const PromptTemplateVersion = require('./prompt-template-version.model');
 const AuditManualAnnotation = require('./audit-manual-annotation.model');
 const AuditEvaluationReport = require('./audit-evaluation-report.model');
+const UserFeedback = require('./user-feedback.model');
 
 User.hasMany(Article, { foreignKey: 'user_id' });
 Article.belongsTo(User, { foreignKey: 'user_id' });
@@ -38,6 +39,10 @@ Article.hasMany(AuditManualAnnotation, { foreignKey: 'article_id' });
 AuditManualAnnotation.belongsTo(Article, { foreignKey: 'article_id' });
 User.hasMany(AuditManualAnnotation, { foreignKey: 'annotator_id' });
 AuditManualAnnotation.belongsTo(User, { foreignKey: 'annotator_id' });
+User.hasMany(UserFeedback, { foreignKey: 'user_id' });
+UserFeedback.belongsTo(User, { foreignKey: 'user_id' });
+Article.hasMany(UserFeedback, { foreignKey: 'article_id' });
+UserFeedback.belongsTo(Article, { foreignKey: 'article_id' });
 
 async function ensureArticleSchemaUpgrades() {
   const sequelize = User.sequelize;
@@ -54,6 +59,24 @@ async function ensureArticleSchemaUpgrades() {
           defaultValue: 0,
         });
       }
+    }
+
+    const aiRankColumns = ['ai_rank_score', 'ai_rank_reason', 'ai_rank_tags'];
+    for (const column of aiRankColumns) {
+      if (!articles[column]) {
+        await queryInterface.addColumn('articles', column, {
+          type: Article.rawAttributes[column].type,
+          allowNull: Article.rawAttributes[column].allowNull ?? true,
+          defaultValue: Article.rawAttributes[column].defaultValue,
+        });
+      }
+    }
+
+    const indexes = await queryInterface.showIndex('articles');
+    if (!indexes.some((index) => index.name === 'idx_ai_rank_status')) {
+      await queryInterface.addIndex('articles', ['status', 'ai_rank_score'], {
+        name: 'idx_ai_rank_status',
+      });
     }
 
     await sequelize.query(
@@ -186,5 +209,6 @@ module.exports = {
   PromptTemplateVersion,
   AuditManualAnnotation,
   AuditEvaluationReport,
+  UserFeedback,
   syncModels,
 };

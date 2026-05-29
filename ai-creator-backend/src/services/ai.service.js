@@ -20,6 +20,30 @@ JSON schema:
 3. 若不合规，safe_alternative 必须给出不改变核心创意的合规替代文本。
 4. 若合规，safe_alternative 返回空字符串。`;
 
+const localRiskRules = [
+  {
+    category: "PORN",
+    level: "HIGH",
+    pattern: /(做爱|性交|约炮|裸聊|色情|性爱|强奸|猥亵|露骨性描写)/i,
+    reason: "内容包含涉黄或露骨性暗示，不适合生成、发布或作为配图提示词。",
+    safeAlternative: "请改为健康、含蓄的情感互动场景，例如：一个男生和一个女生在温馨自然的场景中交流、牵手或一起看风景。",
+  },
+  {
+    category: "GAMBLING",
+    level: "HIGH",
+    pattern: /(赌博|博彩|下注|赌资|稳赚下注|网赌)/i,
+    reason: "内容包含赌博或博彩相关风险表达。",
+    safeAlternative: "请改为防范赌博风险、理性消费或反诈提醒方向的内容。",
+  },
+  {
+    category: "DRUG",
+    level: "HIGH",
+    pattern: /(毒品|吸毒|贩毒|制毒|买毒|冰毒|海洛因|大麻交易)/i,
+    reason: "内容包含涉毒相关风险表达。",
+    safeAlternative: "请改为禁毒科普、健康生活或风险警示方向的内容。",
+  },
+];
+
 function safeJsonParse(raw) {
   const normalized = String(raw || "")
     .trim()
@@ -41,6 +65,33 @@ function safeJsonParse(raw) {
       return undefined;
     }
   }
+}
+
+function scanLocalRisk(text) {
+  const value = String(text || "");
+  return localRiskRules.find((rule) => rule.pattern.test(value));
+}
+
+function buildLocalRiskResult(rule) {
+  return {
+    is_compliant: false,
+    risk_level: rule.level,
+    risk_category: rule.category,
+    reason: rule.reason,
+    accuracy: 0.98,
+    safe_alternative: rule.safeAlternative,
+  };
+}
+
+function normalizeProviderError(message) {
+  const text = String(message || "");
+  if (/sensitive information|sensitive content|input text may contain sensitive/i.test(text)) {
+    return "输入内容可能包含敏感、低俗或不适宜生成的描述，已被模型安全策略拦截。请将提示词改为健康、含蓄、非露骨的场景描述后再试。";
+  }
+  if (/content policy|safety policy|violate/i.test(text)) {
+    return "输入内容不符合模型内容安全策略，无法继续生成。请修改为合规表达后再试。";
+  }
+  return text;
 }
 
 function isLikelyImageUrl(url) {
@@ -199,7 +250,7 @@ async function callArkResponses({ model, input, instructions, extra = {} }) {
       payload?.error?.message ||
       payload?.message ||
       `HTTP ${response.status}`;
-    throw new Error(`火山方舟 REST API 调用失败：${detail}`);
+    throw new Error(`火山方舟 REST API 调用失败：${normalizeProviderError(detail)}`);
   }
 
   return payload;
@@ -240,7 +291,7 @@ function normalizeArkImageError(message) {
   if (/only supported by certain models/i.test(text)) {
     return "当前接入点不支持 /images/generations。若使用 doubao-seed-2.0-lite，请保持 ARK_IMAGE_MODEL 与 ARK_MODEL 相同（ep- 开头），系统将自动走对话生图。";
   }
-  return text;
+  return normalizeProviderError(text);
 }
 
 function shouldUseArkChatImage(modelId) {
@@ -562,7 +613,19 @@ async function generateContent({ prompt, mode, materials = [] }) {
   );
 }
 
-async function auditContent({ title, content }) {
+async function auditContent({ prompt = "", title, content }) {
+  const auditText = [
+    prompt ? `创作提示词：${prompt}` : "",
+    title ? `标题：${title}` : "",
+    content ? `正文：${content}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const localRisk = scanLocalRisk(auditText);
+  if (localRisk) {
+    return buildLocalRiskResult(localRisk);
+  }
+
   const fallback = (reason) => ({
     is_compliant: true,
     risk_level: "LOW",
@@ -578,7 +641,7 @@ async function auditContent({ title, content }) {
   return chatJson(
     [
       { role: "system", content: auditSystemPrompt },
-      { role: "user", content: JSON.stringify({ title, content }) },
+      { role: "user", content: JSON.stringify({ prompt, title, content }) },
     ],
     fallback
   );
@@ -622,8 +685,47 @@ async function evaluateQuality({ title, content }) {
   };
 }
 
+async function evaluateRankingPotential({ title, content, quality_score = 0 }) {
+  const fallbackScore = Math.max(
+    30,
+    Math.min(
+      92,
+      Math.round((Number(quality_score || 0) * 0.7 + Math.min(content.length / 25, 25)) * 10) / 10
+    )
+  );
+  const result = await chatJson(
+    [
+      {
+        role: "system",
+        content:
+          "你是内容推荐排序策略专家。请只返回严格 JSON：ai_rank_score(number,0-100)、ranking_reason(string)、topic_tags(string[])。综合主题吸引力、原创度、平台适配度、标题党风险、可传播性和用户反馈潜力评分。高质量且适合推荐的内容给高分，标题党、重复、低信息量或边界风险内容应降权。",
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ title, content, quality_score }),
+      },
+    ],
+    () => ({
+      ai_rank_score: fallbackScore,
+      ranking_reason: "基于质量分、正文长度和基础结构的本地兜底推荐分",
+      topic_tags: ["内容推荐"],
+    })
+  );
+
+  return {
+    ai_rank_score: Math.max(0, Math.min(100, Number(result.ai_rank_score || fallbackScore))),
+    ranking_reason: String(result.ranking_reason || "AI 推荐排序评分"),
+    topic_tags: Array.isArray(result.topic_tags) ? result.topic_tags.slice(0, 6).map(String) : [],
+  };
+}
+
 async function generateImage({ prompt, title, content }) {
   const imagePrompt = buildScenePrompt({ prompt, title, content });
+  const localRisk = scanLocalRisk(imagePrompt);
+  if (localRisk) {
+    throw new Error(buildLocalRiskResult(localRisk).reason);
+  }
+
   const failures = [];
 
   if (ark.apiKey && ark.imageModel) {
@@ -704,4 +806,5 @@ module.exports = {
   generateVideo,
   auditContent,
   evaluateQuality,
+  evaluateRankingPotential,
 };

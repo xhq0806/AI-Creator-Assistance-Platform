@@ -181,6 +181,7 @@ export default function CreatorPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [online, setOnline] = useState(() => navigator.onLine);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
@@ -199,6 +200,7 @@ export default function CreatorPage() {
   const [loadedStatus, setLoadedStatus] =
     useState<ArticleDraft["status"]>("draft");
   const localDraftId = useRef(createLocalDraftId());
+  const publishingRef = useRef(false);
 
   const connectivityTag = useMemo(
     () =>
@@ -358,6 +360,12 @@ export default function CreatorPage() {
   ): Promise<number | undefined> {
     if (!currentUser) {
       return undefined;
+    }
+    if (publishingRef.current) {
+      if (showToast) {
+        messageApi.info("正在审核并发布，请稍候");
+      }
+      return articleId;
     }
 
     const values = form.getFieldsValue();
@@ -618,6 +626,7 @@ export default function CreatorPage() {
     setAuditing(true);
     try {
       const result = await auditContent({
+        prompt: values.prompt || "",
         title: values.title || "",
         content: values.content || "",
       });
@@ -668,6 +677,11 @@ export default function CreatorPage() {
   }
 
   async function handlePublish() {
+    if (publishingRef.current) {
+      messageApi.info("正在审核、评分并发布，请勿重复点击");
+      return;
+    }
+
     const values = form.getFieldsValue();
     const title = values.title || "";
     const content = values.content || "";
@@ -676,23 +690,39 @@ export default function CreatorPage() {
       return;
     }
 
+    publishingRef.current = true;
+    setPublishing(true);
     setSaving(true);
     try {
+      messageApi.loading({
+        content: "正在审核、评分并发布，请稍候...",
+        key: "publish",
+        duration: 0,
+      });
       const savedArticle = await saveDraft({
         id: articleId,
         title,
         content,
         media_urls: mediaUrls,
         status: "published",
+        auto_fix: true,
       });
       setArticleId(savedArticle.id);
       setLoadedStatus("published");
-      messageApi.success("内容已通过审核并发布");
+      messageApi.success({
+        content: savedArticle.auto_fixed
+          ? "内容已自动改写为合规版本并发布"
+          : "内容已通过审核并发布",
+        key: "publish",
+      });
       resetEditor();
       history.push(`/article/${savedArticle.id}`);
     } catch (error) {
+      messageApi.destroy("publish");
       messageApi.error(error instanceof Error ? error.message : "发布失败");
     } finally {
+      publishingRef.current = false;
+      setPublishing(false);
       setSaving(false);
     }
   }
@@ -704,7 +734,7 @@ export default function CreatorPage() {
         <Card className={styles.editorCard}>
           <div className={styles.status}>
             <Typography.Title level={3} style={{ margin: 0 }}>
-              AI 内容创作工作台{" "}
+              灵感创作工作台{" "}
               {loadedStatus === "published" ? (
                 <Tag color="blue">二次编辑</Tag>
               ) : null}
@@ -743,6 +773,7 @@ export default function CreatorPage() {
             <Button
               icon={<SaveOutlined />}
               loading={saving}
+              disabled={publishing}
               onClick={() => handleSaveDraft()}
             >
               保存草稿
@@ -750,7 +781,8 @@ export default function CreatorPage() {
             <Button
               type="primary"
               ghost
-              loading={saving}
+              loading={publishing}
+              disabled={publishing}
               onClick={handlePublish}
             >
               审核并发布

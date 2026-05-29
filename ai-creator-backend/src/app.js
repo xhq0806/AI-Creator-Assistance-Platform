@@ -16,6 +16,7 @@ const materialController = require('./controllers/material.controller');
 const uploadController = require('./controllers/upload.controller');
 const promptTeamController = require('./controllers/prompt-team.controller');
 const auditAnnotationController = require('./controllers/audit-annotation.controller');
+const userController = require('./controllers/user.controller');
 
 const app = express();
 
@@ -68,13 +69,18 @@ app.get('/api/v1/audit/annotations', requireAuth, auditAnnotationController.list
 app.post('/api/v1/audit/evaluation/report', requireAuth, auditAnnotationController.generateEvaluationReport);
 app.get('/api/v1/audit/evaluation/reports', requireAuth, auditAnnotationController.listEvaluationReports);
 
+app.get('/api/v1/users/me', requireAuth, userController.profile);
+app.put('/api/v1/users/me', requireAuth, userController.updateProfile);
+app.get('/api/v1/users/me/articles', requireAuth, userController.myArticles);
+app.get('/api/v1/users/me/feedback/:type', requireAuth, userController.myFeedbackArticles);
+
 app.post('/api/v1/articles/draft', requireAuth, articleController.upsertDraft);
 app.post('/api/v1/articles/drafts/sync', requireAuth, articleController.syncDrafts);
 app.get('/api/v1/articles/latest-draft', requireAuth, articleController.latestDraft);
 app.get('/api/v1/articles/:id/versions', requireAuth, articleController.versions);
 app.post('/api/v1/articles/:id/versions/:versionId/restore', requireAuth, articleController.restoreVersion);
 app.post('/api/v1/articles/:id/withdraw', requireAuth, articleController.withdraw);
-app.post('/api/v1/articles/:id/feedback', articleController.feedback);
+app.post('/api/v1/articles/:id/feedback', requireAuth, articleController.feedback);
 app.get('/api/v1/articles/:id', articleController.detail);
 
 app.get('/api/v1/rank/hot', rankingController.hot);

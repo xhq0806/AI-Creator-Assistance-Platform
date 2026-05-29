@@ -83,10 +83,18 @@ export default function ArticlePage() {
   const canEdit = currentUser?.id === currentArticle.user_id;
 
   async function handleFeedback(type: 'like' | 'favorite' | 'negative') {
+    if (!currentUser) {
+      messageApi.warning('请先登录后再反馈');
+      history.push('/login');
+      return;
+    }
+
     try {
       const updated = await sendArticleFeedback(currentArticle.id, type);
       setArticle(updated);
-      messageApi.success(type === 'negative' ? '已收到反馈' : '反馈成功');
+      const successMessage =
+        type === 'like' ? '点赞成功' : type === 'favorite' ? '收藏成功' : '已收到反馈';
+      messageApi.success(successMessage);
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : '反馈失败');
     }
@@ -147,6 +155,11 @@ export default function ArticlePage() {
             <Tag color={article.status === 'published' ? 'green' : 'orange'}>{article.status}</Tag>
           </Descriptions.Item>
           <Descriptions.Item label="质量分">{article.quality_score}</Descriptions.Item>
+          <Descriptions.Item label="AI 推荐分">{article.ai_rank_score ?? '-'}</Descriptions.Item>
+          <Descriptions.Item label="AI 推荐理由">{article.ai_rank_reason || '-'}</Descriptions.Item>
+          <Descriptions.Item label="主题标签">
+            {article.ai_rank_tags?.length ? article.ai_rank_tags.map((tag) => <Tag key={tag}>{tag}</Tag>) : '-'}
+          </Descriptions.Item>
           <Descriptions.Item label="阅读量">{article.view_count}</Descriptions.Item>
           <Descriptions.Item label="正向反馈">{article.like_count + article.favorite_count}</Descriptions.Item>
           <Descriptions.Item label="负反馈">{article.negative_count}</Descriptions.Item>

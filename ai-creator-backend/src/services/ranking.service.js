@@ -32,7 +32,10 @@ async function getHotArticles({ cursor = '+inf', limit = 10 }) {
     const fallbackArticles = await Article.findAll({
       where: { status: 'published' },
       include: [{ model: User, attributes: ['id', 'username'] }],
-      order: [['quality_score', 'DESC']],
+      order: [
+        ['ai_rank_score', 'DESC'],
+        ['quality_score', 'DESC'],
+      ],
       limit,
     });
     const list = fallbackArticles.map((article) => {
@@ -43,6 +46,9 @@ async function getHotArticles({ cursor = '+inf', limit = 10 }) {
         id: Number(payload.id),
         user_id: Number(payload.user_id),
         quality_score: Number(payload.quality_score || 0),
+        ai_rank_score: Number(payload.ai_rank_score || 0),
+        ai_rank_reason: payload.ai_rank_reason || '',
+        ai_rank_tags: payload.ai_rank_tags || [],
         cover_url: Array.isArray(mediaUrls) ? mediaUrls[0] : undefined,
         author: payload.User ? { id: Number(payload.User.id), username: payload.User.username } : undefined,
         score: calculateHotScore(article),
@@ -75,6 +81,9 @@ async function getHotArticles({ cursor = '+inf', limit = 10 }) {
         id: Number(cached.id),
         user_id: Number(cached.user_id),
         quality_score: Number(cached.quality_score || 0),
+        ai_rank_score: Number(cached.ai_rank_score || 0),
+        ai_rank_reason: cached.ai_rank_reason || '',
+        ai_rank_tags: cached.ai_rank_tags || [],
         cover_url: Array.isArray(mediaUrls) ? mediaUrls[0] : undefined,
         author: cached.User ? { id: Number(cached.User.id), username: cached.User.username } : cached.author,
         score: pair.score,

@@ -1,6 +1,8 @@
 export interface CurrentUser {
   id: number;
   username: string;
+  phone?: string;
+  email?: string;
   token: string;
 }
 

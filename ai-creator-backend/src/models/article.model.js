@@ -37,6 +37,22 @@ const Article = sequelize.define(
         max: 100,
       },
     },
+    ai_rank_score: {
+      type: DataTypes.DECIMAL(5, 2),
+      defaultValue: 0,
+      validate: {
+        min: 0,
+        max: 100,
+      },
+    },
+    ai_rank_reason: {
+      type: DataTypes.STRING(512),
+      defaultValue: '',
+    },
+    ai_rank_tags: {
+      type: DataTypes.JSON,
+      allowNull: true,
+    },
     view_count: {
       type: DataTypes.INTEGER.UNSIGNED,
       defaultValue: 0,

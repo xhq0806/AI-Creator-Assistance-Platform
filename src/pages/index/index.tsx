@@ -112,8 +112,16 @@ export default function HotFeedPage() {
               </Typography.Paragraph>
               <RichText className={styles.excerpt} content={article.content} />
               <Tag color="blue">质量分 {article.quality_score}</Tag>
+              {article.ai_rank_score !== undefined ? (
+                <Tag color="geekblue">AI 推荐 {Math.round(article.ai_rank_score)}</Tag>
+              ) : null}
               <Tag color="purple">热度 {article.score.toFixed(2)}</Tag>
               <Tag>阅读 {article.view_count}</Tag>
+              {article.ai_rank_reason ? (
+                <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
+                  推荐理由：{article.ai_rank_reason}
+                </Typography.Paragraph>
+              ) : null}
             </Card>
           ))}
         </section>
