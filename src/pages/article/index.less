@@ -8,12 +8,24 @@
   border-radius: 22px;
 }
 
-.cover {
+.coverWrap {
+  display: flex;
+  justify-content: center;
   width: 100%;
+  margin-bottom: 24px;
+}
+
+.cover {
+  display: block;
+  width: min(100%, 960px);
   max-height: 420px;
   object-fit: cover;
-  margin-bottom: 24px;
   border-radius: 18px;
+}
+
+.coverWrap :global(.ant-image) {
+  display: block;
+  width: min(100%, 960px);
 }
 
 .content {
@@ -32,6 +44,52 @@
 
 .metaCard {
   border-radius: 18px;
+}
+
+.metaCard :global(.ant-descriptions-item-container) {
+  align-items: flex-start;
+}
+
+.metaCard :global(.ant-descriptions-item-label) {
+  width: 92px;
+  flex: 0 0 92px;
+  white-space: nowrap;
+}
+
+.metaCard :global(.ant-descriptions-item-content) {
+  flex: 1;
+  min-width: 0;
+}
+
+.rankInsight {
+  margin-top: 8px;
+}
+
+.rankLabel {
+  display: block;
+  margin: 10px 0 6px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.rankReason {
+  width: 100%;
+  color: #374151;
+  line-height: 1.7;
+  text-align: left;
+  word-break: break-word;
+  margin-bottom: 0;
+}
+
+.tagWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 4px;
+  max-width: 100%;
+}
+
+.tagWrap :global(.ant-tag) {
+  margin-right: 0;
 }
 
 @media (max-width: 900px) {

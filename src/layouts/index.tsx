@@ -64,6 +64,7 @@ export default function Layout() {
           <Dropdown
             menu={{ items: userMenuItems, onClick: handleUserMenuClick }}
             placement="bottomRight"
+            overlayClassName={styles.profileDropdown}
           >
             <Button className={styles.signOutButton} type="link">
               个人中心 {currentUser.username} <DownOutlined />

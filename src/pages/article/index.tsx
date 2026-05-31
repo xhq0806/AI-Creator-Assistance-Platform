@@ -129,13 +129,15 @@ export default function ArticlePage() {
       {contextHolder}
       <Card className={styles.article}>
         {article.cover_url && (
-          <Image
-            className={styles.cover}
-            src={article.cover_url}
-            alt={article.title}
-            preview={false}
-            fallback={createFallbackCover(article.title)}
-          />
+          <div className={styles.coverWrap}>
+            <Image
+              className={styles.cover}
+              src={article.cover_url}
+              alt={article.title}
+              preview={false}
+              fallback={createFallbackCover(article.title)}
+            />
+          </div>
         )}
         <Typography.Title>{article.title}</Typography.Title>
         <Typography.Paragraph type="secondary">
@@ -156,15 +158,27 @@ export default function ArticlePage() {
           </Descriptions.Item>
           <Descriptions.Item label="质量分">{article.quality_score}</Descriptions.Item>
           <Descriptions.Item label="AI 推荐分">{article.ai_rank_score ?? '-'}</Descriptions.Item>
-          <Descriptions.Item label="AI 推荐理由">{article.ai_rank_reason || '-'}</Descriptions.Item>
-          <Descriptions.Item label="主题标签">
-            {article.ai_rank_tags?.length ? article.ai_rank_tags.map((tag) => <Tag key={tag}>{tag}</Tag>) : '-'}
-          </Descriptions.Item>
           <Descriptions.Item label="阅读量">{article.view_count}</Descriptions.Item>
           <Descriptions.Item label="正向反馈">{article.like_count + article.favorite_count}</Descriptions.Item>
           <Descriptions.Item label="负反馈">{article.negative_count}</Descriptions.Item>
           <Descriptions.Item label="热度">{article.score?.toFixed ? article.score.toFixed(2) : '-'}</Descriptions.Item>
         </Descriptions>
+        <div className={styles.rankInsight}>
+          <Typography.Text className={styles.rankLabel}>AI 推荐理由：</Typography.Text>
+          <Typography.Paragraph className={styles.rankReason}>
+            {article.ai_rank_reason || '-'}
+          </Typography.Paragraph>
+          <Typography.Text className={styles.rankLabel}>主题标签：</Typography.Text>
+          {article.ai_rank_tags?.length ? (
+            <div className={styles.tagWrap}>
+              {article.ai_rank_tags.map((tag) => (
+                <Tag key={tag}>{tag}</Tag>
+              ))}
+            </div>
+          ) : (
+            <Typography.Text>-</Typography.Text>
+          )}
+        </div>
         {canEdit && (
           <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
             <Button type="primary" block onClick={() => history.push(`/creator/${article.id}`)}>

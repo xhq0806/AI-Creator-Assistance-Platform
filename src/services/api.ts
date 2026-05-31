@@ -209,7 +209,7 @@ export async function generateContent(payload: {
   prompt: string;
   mode: "full_generation" | "rewrite" | "outline";
   materials?: string[];
-}) {
+}, signal?: AbortSignal) {
   const response = await requestJson<{
     title: string;
     content: string;
@@ -217,6 +217,7 @@ export async function generateContent(payload: {
   }>("/api/v1/ai/generate", {
     method: "POST",
     data: payload,
+    signal,
   });
 
   return response.data;

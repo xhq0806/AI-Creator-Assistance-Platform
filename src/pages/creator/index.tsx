@@ -16,6 +16,7 @@ import {
 } from "antd";
 import type { UploadProps } from "antd";
 import {
+  LoadingOutlined,
   ThunderboltOutlined,
   SafetyCertificateOutlined,
   SaveOutlined,
@@ -201,6 +202,7 @@ export default function CreatorPage() {
     useState<ArticleDraft["status"]>("draft");
   const localDraftId = useRef(createLocalDraftId());
   const publishingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const connectivityTag = useMemo(
     () =>
@@ -438,20 +440,34 @@ export default function CreatorPage() {
       return;
     }
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setGenerating(true);
     try {
-      const generated = await generateContent({
-        prompt,
-        mode: "full_generation",
-        materials: mediaUrls,
-      });
+      const generated = await generateContent(
+        {
+          prompt,
+          mode: "full_generation",
+          materials: mediaUrls,
+        },
+        controller.signal
+      );
       form.setFieldsValue(generated);
       messageApi.success("AI 内容已生成");
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        messageApi.info("已停止生成");
+        return;
+      }
       messageApi.error(error instanceof Error ? error.message : "AI 生成失败");
     } finally {
       setGenerating(false);
+      abortControllerRef.current = null;
     }
+  }
+
+  function handleStopGenerate() {
+    abortControllerRef.current?.abort();
   }
 
   async function handleGenerateImage() {
@@ -744,11 +760,10 @@ export default function CreatorPage() {
           <div className={styles.toolbar}>
             <Button
               type="primary"
-              icon={<ThunderboltOutlined />}
-              loading={generating}
-              onClick={handleGenerate}
+              icon={generating ? <LoadingOutlined /> : <ThunderboltOutlined />}
+              onClick={generating ? handleStopGenerate : handleGenerate}
             >
-              AI 生成
+              {generating ? "停止生成" : "AI 生成"}
             </Button>
             <Button loading={generatingImage} onClick={handleGenerateImage}>
               生成配图
