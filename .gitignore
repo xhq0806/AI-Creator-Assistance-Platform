@@ -13,5 +13,5 @@ node_modules/
 debug.log
 
 # Environment files
-ai-creator-backend/.env
-ai-creator-backend/.env.example
+# ai-creator-backend/.env
+# ai-creator-backend/.env.example
