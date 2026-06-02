@@ -39,14 +39,19 @@
 .feed {
   column-count: 2;
   column-gap: 18px;
+  column-fill: balance;
+  transition: opacity 0.2s;
+}
+
+.feedLoading {
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .articleCard {
   break-inside: avoid;
   margin-bottom: 18px;
   border-radius: 18px;
-  display: inline-block;
-  width: 100%;
 }
 
 .excerpt {
@@ -79,6 +84,24 @@
   height: 56px;
 }
 
+.sentinelLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 0;
+}
+
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  max-width: 760px;
+}
+
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: 1fr;
@@ -86,5 +109,38 @@
 
   .feed {
     column-count: 1;
+  }
+
+  .filterBar {
+    padding: 0 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .hero {
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .heroCard :global(.ant-typography) {
+    font-size: 18px !important;
+  }
+
+  .heroCard :global(.ant-typography h1),
+  .heroCard :global(.ant-typography h2) {
+    font-size: 20px !important;
+  }
+
+  .articleCard {
+    border-radius: 12px;
+  }
+
+  .cover {
+    height: 140px;
+    border-radius: 10px;
+  }
+
+  .filterBar {
+    gap: 4px;
   }
 }

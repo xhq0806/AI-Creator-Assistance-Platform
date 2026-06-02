@@ -1,5 +1,6 @@
+import RichText from "@/components/RichText";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, DragEvent } from "react";
 import {
   Alert,
   Button,
@@ -7,8 +8,11 @@ import {
   Divider,
   Form,
   Input,
+  List,
+  Modal,
   Select,
   Space,
+  Spin,
   Tag,
   Typography,
   message,
@@ -16,18 +20,22 @@ import {
 } from "antd";
 import type { UploadProps } from "antd";
 import {
+  BarChartOutlined,
+  DeleteOutlined,
+  HistoryOutlined,
   LoadingOutlined,
-  ThunderboltOutlined,
   SafetyCertificateOutlined,
   SaveOutlined,
-  DeleteOutlined,
-  BarChartOutlined,
+  ThunderboltOutlined,
+  PictureOutlined,
 } from "@ant-design/icons";
 import { history, useLocation, useModel, useParams } from "umi";
 import {
   auditContent,
+  confirmUpload,
   createMaterial,
   createPromptTemplate,
+  createPromptTeam,
   deleteMaterial,
   deletePromptTemplate,
   evaluateQuality,
@@ -35,19 +43,27 @@ import {
   fetchLatestDraft,
   fetchMaterials,
   fetchPromptTemplates,
+  fetchTemplateVersions,
   generateContent,
   generateImage,
   generateVideo,
   getUploadCredential,
-  confirmUpload,
+  listMyPromptTeams,
   markPromptTemplateUsed,
+  restoreTemplateVersion,
   saveDraft,
+  saveTemplateWithVersion,
   syncDistribution,
   syncOfflineDrafts,
+  fetchGenerationHistory,
+  deleteGenerationHistory,
   type ArticleDraft,
   type AuditResult,
+  type GenerationRecord,
   type MaterialItem,
+  type PromptTeam,
   type PromptTemplate,
+  type PromptTemplateVersion,
   type UploadCredential,
 } from "@/services/api";
 import {
@@ -133,12 +149,79 @@ function RichContentEditor({
 }: RichContentEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
 
+  function insertMarkdown(before: string, after = "") {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const selected = range.toString();
+    const wrapped = `${before}${selected}${after}`;
+    range.deleteContents();
+    range.insertNode(document.createTextNode(wrapped));
+    onChange?.(editor.textContent || "");
+  }
+
+  function insertBlock(prefix: string) {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const text = range.toString();
+    const wrapped = text ? `${prefix}${text}` : prefix;
+    range.deleteContents();
+    range.insertNode(document.createTextNode(wrapped));
+    onChange?.(editor.textContent || "");
+  }
+
+  function insertImageMarkdown(url: string, alt = "配图") {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const imageMd = `![${alt}](${url})`;
+    range.deleteContents();
+    range.insertNode(document.createTextNode(imageMd));
+    onChange?.(editor.textContent || "");
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const url = event.dataTransfer.getData("text/plain");
+    if (url) {
+      insertImageMarkdown(url, "素材图片");
+    }
+  }
+
+  const toolbarItems = [
+    { label: "H", title: "标题", action: () => insertBlock("## ") },
+    { label: "B", title: "加粗", action: () => insertMarkdown("**", "**") },
+    { label: "I", title: "斜体", action: () => insertMarkdown("*", "*") },
+    { label: ">", title: "引用", action: () => insertBlock("> ") },
+    { label: "•", title: "列表", action: () => insertBlock("- ") },
+    { label: "1.", title: "编号", action: () => insertBlock("1. ") },
+    { label: "</>", title: "代码", action: () => insertBlock("`") },
+    { label: "🔗", title: "链接", action: () => insertMarkdown("[", "](url)") },
+    { label: "—", title: "分割线", action: () => insertBlock("\n---\n") },
+    {
+      label: "🖼",
+      title: "插入图片标记",
+      action: () => insertBlock("![配图描述](url)"),
+    },
+  ];
+
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor || document.activeElement === editor) {
       return;
     }
-
     editor.innerHTML = value ? markdownToHtml(value) : "";
   }, [value]);
 
@@ -151,14 +234,35 @@ function RichContentEditor({
   }
 
   return (
-    <div
-      ref={editorRef}
-      className={styles.richEditor}
-      contentEditable
-      data-placeholder={placeholder}
-      onInput={handleInput}
-      suppressContentEditableWarning
-    />
+    <div className={styles.editorWrap}>
+      <div className={styles.editorToolbar}>
+        {toolbarItems.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            className={styles.toolbarBtn}
+            title={item.title}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              item.action();
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+        <span className={styles.toolbarHint}>支持 Markdown 语法</span>
+      </div>
+      <div
+        ref={editorRef}
+        className={styles.richEditor}
+        contentEditable
+        data-placeholder={placeholder}
+        onInput={handleInput}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        suppressContentEditableWarning
+      />
+    </div>
   );
 }
 
@@ -184,6 +288,9 @@ export default function CreatorPage() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generateMode, setGenerateMode] = useState<
+    "full_generation" | "structured" | "rewrite" | "outline"
+  >("full_generation");
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [auditing, setAuditing] = useState(false);
@@ -192,17 +299,39 @@ export default function CreatorPage() {
   const [qualityResult, setQualityResult] = useState<QualityResult>();
   const [articleId, setArticleId] = useState<number>();
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [articleCategory, setArticleCategory] = useState("");
   const [materialInput, setMaterialInput] = useState("");
   const [materialName, setMaterialName] = useState("");
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [promptName, setPromptName] = useState("");
   const [promptCategory, setPromptCategory] = useState("通用");
+  const [promptTeamModalOpen, setPromptTeamModalOpen] = useState(false);
+  const [myTeams, setMyTeams] = useState<PromptTeam[]>([]);
+  const [teamName, setTeamName] = useState("");
+  const [creatingTeam, setCreatingTeam] = useState(false);
+  const [sharingVisibility, setSharingVisibility] = useState<
+    "private" | "team_public"
+  >("private");
+  const [versionModalOpen, setVersionModalOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [currentTemplateVersions, setCurrentTemplateVersions] = useState<
+    PromptTemplateVersion[]
+  >([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
   const [loadedStatus, setLoadedStatus] =
     useState<ArticleDraft["status"]>("draft");
   const localDraftId = useRef(createLocalDraftId());
   const publishingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const imageAbortRef = useRef<AbortController | null>(null);
+  const videoAbortRef = useRef<AbortController | null>(null);
+  const publishAbortRef = useRef<AbortController | null>(null);
+  const [generationHistory, setGenerationHistory] = useState<
+    GenerationRecord[]
+  >([]);
+  const [generationHistoryOpen, setGenerationHistoryOpen] = useState(false);
+  const [draggedMaterial, setDraggedMaterial] = useState<string | null>(null);
 
   const connectivityTag = useMemo(
     () =>
@@ -298,6 +427,7 @@ export default function CreatorPage() {
     setAuditResult(undefined);
     setQualityResult(undefined);
     setMediaUrls([]);
+    setArticleCategory("");
     setMaterialInput("");
     setMaterialName("");
     setLoadedStatus("draft");
@@ -317,9 +447,11 @@ export default function CreatorPage() {
         setArticleId(article.id);
         setLoadedStatus(article.status);
         setMediaUrls(article.media_urls || []);
+        setArticleCategory(article.category || "通用");
         form.setFieldsValue({
           title: article.title,
           content: article.content,
+          category: article.category || "通用",
           media_urls: article.media_urls || [],
         });
         return;
@@ -333,6 +465,7 @@ export default function CreatorPage() {
       if (!online && localDraft) {
         setArticleId(localDraft.id);
         setMediaUrls(localDraft.media_urls || []);
+        setArticleCategory(localDraft.category || "通用");
         form.setFieldsValue(localDraft);
         messageApi.info("已恢复本地离线草稿");
         return;
@@ -343,6 +476,7 @@ export default function CreatorPage() {
       if (draft) {
         setArticleId(draft.id);
         setMediaUrls(draft.media_urls || []);
+        setArticleCategory(draft.category || "通用");
         form.setFieldsValue(draft);
         messageApi.success(
           cloudDraft ? "已恢复上次云端草稿" : "已恢复本地草稿"
@@ -389,6 +523,7 @@ export default function CreatorPage() {
       title: rawTitle || "未命名草稿",
       content: values.content || "",
       media_urls: mediaUrls,
+      category: articleCategory || undefined,
       status: "draft",
     };
 
@@ -447,7 +582,7 @@ export default function CreatorPage() {
       const generated = await generateContent(
         {
           prompt,
-          mode: "full_generation",
+          mode: generateMode,
           materials: mediaUrls,
         },
         controller.signal
@@ -482,14 +617,19 @@ export default function CreatorPage() {
       return;
     }
 
+    const controller = new AbortController();
+    imageAbortRef.current = controller;
     setGeneratingImage(true);
     try {
-      const result = await generateImage({
-        prompt: values.prompt,
-        title: values.title,
-        content: values.content,
-        materials: mediaUrls,
-      });
+      const result = await generateImage(
+        {
+          prompt: values.prompt,
+          title: values.title,
+          content: values.content,
+          materials: mediaUrls,
+        },
+        controller.signal
+      );
       setMediaUrls(result.media_urls);
       if (result.provider === "placeholder") {
         messageApi.warning(
@@ -499,12 +639,21 @@ export default function CreatorPage() {
         messageApi.success("AI 配图已生成");
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        messageApi.info("已停止生成配图");
+        return;
+      }
       messageApi.error(
         error instanceof Error ? error.message : "AI 配图生成失败"
       );
     } finally {
       setGeneratingImage(false);
+      imageAbortRef.current = null;
     }
+  }
+
+  function handleStopGenerateImage() {
+    imageAbortRef.current?.abort();
   }
 
   async function handleGenerateVideo() {
@@ -519,25 +668,39 @@ export default function CreatorPage() {
       return;
     }
 
+    const controller = new AbortController();
+    videoAbortRef.current = controller;
     setGeneratingVideo(true);
     try {
-      const result = await generateVideo({
-        prompt: values.prompt,
-        title: values.title,
-        content: values.content,
-        materials: mediaUrls,
-      });
+      const result = await generateVideo(
+        {
+          prompt: values.prompt,
+          title: values.title,
+          content: values.content,
+          materials: mediaUrls,
+        },
+        controller.signal
+      );
       setMediaUrls((current) =>
         Array.from(new Set([...result.media_urls, ...current]))
       );
       messageApi.success("AI 视频已生成并加入素材列表");
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        messageApi.info("已停止生成视频");
+        return;
+      }
       messageApi.error(
         error instanceof Error ? error.message : "AI 视频生成失败"
       );
     } finally {
       setGeneratingVideo(false);
+      videoAbortRef.current = null;
     }
+  }
+
+  function handleStopGenerateVideo() {
+    videoAbortRef.current?.abort();
   }
 
   function applySafeAlternative() {
@@ -554,23 +717,83 @@ export default function CreatorPage() {
     const content = String(form.getFieldValue("prompt") || "").trim();
     const name = promptName.trim();
     if (!name || !content) {
-      messageApi.warning("请填写模板名称，并在创作提示词中准备模板内容");
+      messageApi.warning("请输入模板名称和提示词内容");
       return;
     }
 
     try {
-      const prompt = await createPromptTemplate({
+      const prompt = await saveTemplateWithVersion({
         name,
         category: promptCategory || "通用",
         content,
+        visibility: sharingVisibility,
+        team_id: null,
       });
       setPromptTemplates((current) => [prompt, ...current]);
       setPromptName("");
-      messageApi.success("Prompt 模板已保存");
+      messageApi.success(
+        `Prompt 模板已保存（${
+          sharingVisibility === "team_public" ? "团队共享" : "私有"
+        }）`
+      );
     } catch (error) {
       messageApi.error(
         error instanceof Error ? error.message : "Prompt 模板保存失败"
       );
+    }
+  }
+
+  async function showTemplateVersions(template: PromptTemplate) {
+    setLoadingVersions(true);
+    setVersionModalOpen(true);
+    try {
+      const versions = await fetchTemplateVersions(template.id);
+      setCurrentTemplateVersions(versions);
+    } catch {
+      messageApi.error("加载版本历史失败");
+    } finally {
+      setLoadingVersions(false);
+    }
+  }
+
+  async function handleRestoreVersion(templateId: number, versionId: number) {
+    try {
+      const restored = await restoreTemplateVersion(templateId, versionId);
+      setPromptTemplates((current) =>
+        current.map((t) => (t.id === templateId ? restored : t))
+      );
+      messageApi.success("版本已恢复");
+      setVersionModalOpen(false);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "版本恢复失败");
+    }
+  }
+
+  async function loadMyTeams() {
+    try {
+      const teams = await listMyPromptTeams();
+      setMyTeams(teams);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function handleCreateTeam() {
+    const name = teamName.trim();
+    if (!name) {
+      messageApi.warning("请输入团队名称");
+      return;
+    }
+    setCreatingTeam(true);
+    try {
+      await createPromptTeam({ name });
+      messageApi.success("团队已创建");
+      setTeamName("");
+      loadMyTeams();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "创建团队失败");
+    } finally {
+      setCreatingTeam(false);
     }
   }
 
@@ -694,7 +917,13 @@ export default function CreatorPage() {
 
   async function handlePublish() {
     if (publishingRef.current) {
-      messageApi.info("正在审核、评分并发布，请勿重复点击");
+      publishAbortRef.current?.abort();
+      messageApi.info("已取消本次发布");
+      return;
+    }
+
+    if (!articleCategory) {
+      form.validateFields(["category"]).catch(() => {});
       return;
     }
 
@@ -706,6 +935,8 @@ export default function CreatorPage() {
       return;
     }
 
+    const controller = new AbortController();
+    publishAbortRef.current = controller;
     publishingRef.current = true;
     setPublishing(true);
     setSaving(true);
@@ -715,14 +946,18 @@ export default function CreatorPage() {
         key: "publish",
         duration: 0,
       });
-      const savedArticle = await saveDraft({
-        id: articleId,
-        title,
-        content,
-        media_urls: mediaUrls,
-        status: "published",
-        auto_fix: true,
-      });
+      const savedArticle = await saveDraft(
+        {
+          id: articleId,
+          title,
+          content,
+          media_urls: mediaUrls,
+          category: articleCategory,
+          status: "published",
+          auto_fix: true,
+        },
+        controller.signal
+      );
       setArticleId(savedArticle.id);
       setLoadedStatus("published");
       messageApi.success({
@@ -734,9 +969,17 @@ export default function CreatorPage() {
       resetEditor();
       history.push(`/article/${savedArticle.id}`);
     } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        messageApi.destroy("publish");
+        return;
+      }
       messageApi.destroy("publish");
       messageApi.error(error instanceof Error ? error.message : "发布失败");
     } finally {
+      publishAbortRef.current = null;
       publishingRef.current = false;
       setPublishing(false);
       setSaving(false);
@@ -758,23 +1001,50 @@ export default function CreatorPage() {
             {connectivityTag}
           </div>
           <div className={styles.toolbar}>
+            <Select
+              value={generateMode}
+              onChange={(value) => setGenerateMode(value)}
+              style={{ minWidth: 110 }}
+              disabled={generating}
+            >
+              <Select.Option value="full_generation">全文生成</Select.Option>
+              <Select.Option value="structured">结构化图文</Select.Option>
+              <Select.Option value="rewrite">智能改写</Select.Option>
+              <Select.Option value="outline">大纲生成</Select.Option>
+            </Select>
             <Button
               type="primary"
               icon={generating ? <LoadingOutlined /> : <ThunderboltOutlined />}
               onClick={generating ? handleStopGenerate : handleGenerate}
+              disabled={publishing}
             >
               {generating ? "停止生成" : "AI 生成"}
             </Button>
-            <Button loading={generatingImage} onClick={handleGenerateImage}>
-              生成配图
+            <Button
+              icon={generatingImage ? <LoadingOutlined /> : undefined}
+              loading={generatingImage}
+              onClick={
+                generatingImage ? handleStopGenerateImage : handleGenerateImage
+              }
+              disabled={publishing}
+            >
+              {generatingImage ? "停止生成" : "生成配图"}
             </Button>
-            <Button loading={generatingVideo} onClick={handleGenerateVideo}>
-              生成视频
+            <Button
+              icon={generatingVideo ? <LoadingOutlined /> : undefined}
+              loading={generatingVideo}
+              onClick={
+                generatingVideo ? handleStopGenerateVideo : handleGenerateVideo
+              }
+              disabled={publishing}
+            >
+              {generatingVideo ? "停止生成" : "生成视频"}
             </Button>
             <Button
               icon={<SafetyCertificateOutlined />}
               loading={auditing}
               onClick={handleAudit}
+              disabled={publishing}
             >
               安全审核
             </Button>
@@ -782,6 +1052,7 @@ export default function CreatorPage() {
               icon={<BarChartOutlined />}
               loading={scoring}
               onClick={handleQualityScore}
+              disabled={publishing}
             >
               质量评分
             </Button>
@@ -795,14 +1066,29 @@ export default function CreatorPage() {
             </Button>
             <Button
               type="primary"
-              ghost
-              loading={publishing}
-              disabled={publishing}
+              ghost={!publishing}
+              danger={publishing}
               onClick={handlePublish}
             >
-              审核并发布
+              {publishing ? "停止发布" : "审核并发布"}
             </Button>
-            <Button onClick={handleDistribution}>模拟分发</Button>
+            <Button onClick={handleDistribution} disabled={publishing}>
+              模拟分发
+            </Button>
+            <Button
+              icon={<HistoryOutlined />}
+              onClick={() => {
+                fetchGenerationHistory()
+                  .then(setGenerationHistory)
+                  .catch(() => {});
+                setGenerationHistoryOpen(true);
+              }}
+            >
+              生成历史
+            </Button>
+            <Button onClick={() => setPreviewOpen(true)} disabled={publishing}>
+              预览
+            </Button>
           </div>
           <Form<CreatorForm>
             form={form}
@@ -821,6 +1107,30 @@ export default function CreatorPage() {
               rules={[{ required: true, message: "请输入标题" }]}
             >
               <Input placeholder="输入图文标题" />
+            </Form.Item>
+            <Form.Item
+              name="category"
+              label="文章分类"
+              rules={[{ required: true, message: "请选择文章分类" }]}
+            >
+              <Select
+                value={articleCategory || undefined}
+                onChange={(value) => {
+                  setArticleCategory(value);
+                  form.setFieldsValue({ category: value });
+                }}
+                style={{ width: 160 }}
+                placeholder="请选择文章分类"
+              >
+                <Select.Option value="通用">通用</Select.Option>
+                <Select.Option value="科技">科技</Select.Option>
+                <Select.Option value="生活">生活</Select.Option>
+                <Select.Option value="娱乐">娱乐</Select.Option>
+                <Select.Option value="教育">教育</Select.Option>
+                <Select.Option value="财经">财经</Select.Option>
+                <Select.Option value="体育">体育</Select.Option>
+                <Select.Option value="游戏">游戏</Select.Option>
+              </Select>
             </Form.Item>
             <Form.Item
               name="content"
@@ -856,6 +1166,26 @@ export default function CreatorPage() {
                 <Select.Option value="代码生成">代码生成</Select.Option>
               </Select>
             </Space.Compact>
+            <Space.Compact style={{ width: "100%", marginBottom: 12 }}>
+              <Select
+                value={sharingVisibility}
+                onChange={(value) => setSharingVisibility(value)}
+                style={{ width: "100%" }}
+                size="small"
+              >
+                <Select.Option value="private">私有</Select.Option>
+                <Select.Option value="team_public">团队共享</Select.Option>
+              </Select>
+              <Button
+                size="small"
+                onClick={() => {
+                  setPromptTeamModalOpen(true);
+                  loadMyTeams();
+                }}
+              >
+                团队管理
+              </Button>
+            </Space.Compact>
             <Button
               block
               style={{ marginBottom: 12 }}
@@ -874,18 +1204,293 @@ export default function CreatorPage() {
                   >
                     <span>
                       [{template.category}] {template.name}
+                      {template.visibility === "team_public" ? (
+                        <Tag
+                          color="blue"
+                          style={{ marginLeft: 4, fontSize: 10 }}
+                        >
+                          团队
+                        </Tag>
+                      ) : null}
                     </span>
                   </Button>
                   {template.user_id ? (
-                    <Button
-                      icon={<DeleteOutlined />}
-                      onClick={() => removePromptTemplate(template)}
-                    />
+                    <>
+                      <Button
+                        icon={<HistoryOutlined />}
+                        onClick={() => showTemplateVersions(template)}
+                      />
+                      <Button
+                        icon={<DeleteOutlined />}
+                        onClick={() => removePromptTemplate(template)}
+                      />
+                    </>
                   ) : null}
                 </Space.Compact>
               ))}
             </Space>
           </Card>
+
+          <Modal
+            title="版本历史"
+            open={versionModalOpen}
+            onCancel={() => setVersionModalOpen(false)}
+            footer={null}
+            width={600}
+          >
+            {loadingVersions ? (
+              <div style={{ textAlign: "center", padding: 24 }}>
+                <Spin />
+              </div>
+            ) : currentTemplateVersions.length === 0 ? (
+              <Typography.Text type="secondary">暂无版本历史</Typography.Text>
+            ) : (
+              <List
+                dataSource={currentTemplateVersions}
+                renderItem={(item) => (
+                  <List.Item
+                    actions={[
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          handleRestoreVersion(item.template_id, item.id)
+                        }
+                      >
+                        恢复
+                      </Button>,
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={
+                        <Space>
+                          <Typography.Text strong>
+                            v{item.version_no}
+                          </Typography.Text>
+                          <Typography.Text type="secondary">
+                            {item.change_note || "无备注"}
+                          </Typography.Text>
+                        </Space>
+                      }
+                      description={item.created_at}
+                    />
+                  </List.Item>
+                )}
+              />
+            )}
+          </Modal>
+
+          <Modal
+            title="团队管理"
+            open={promptTeamModalOpen}
+            onCancel={() => setPromptTeamModalOpen(false)}
+            footer={null}
+          >
+            <Typography.Text
+              strong
+              style={{ display: "block", marginBottom: 12 }}
+            >
+              我的团队
+            </Typography.Text>
+            {myTeams.length === 0 ? (
+              <Typography.Text
+                type="secondary"
+                style={{ display: "block", marginBottom: 12 }}
+              >
+                暂无团队，创建一个新团队开始协作
+              </Typography.Text>
+            ) : (
+              <List
+                dataSource={myTeams}
+                size="small"
+                style={{ marginBottom: 16 }}
+                renderItem={(team) => (
+                  <List.Item>
+                    <List.Item.Meta
+                      title={team.name}
+                      description={`创建于 ${team.created_at}`}
+                    />
+                  </List.Item>
+                )}
+              />
+            )}
+            <Space.Compact style={{ width: "100%" }}>
+              <Input
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                placeholder="新团队名称"
+              />
+              <Button
+                type="primary"
+                onClick={handleCreateTeam}
+                loading={creatingTeam}
+              >
+                创建团队
+              </Button>
+            </Space.Compact>
+          </Modal>
+
+          <Modal
+            title="生成历史记录"
+            open={generationHistoryOpen}
+            onCancel={() => setGenerationHistoryOpen(false)}
+            footer={null}
+            width={640}
+          >
+            {generationHistory.length === 0 ? (
+              <Typography.Text type="secondary">
+                暂无生成历史记录，使用 AI 生成内容后会自动记录
+              </Typography.Text>
+            ) : (
+              <List
+                dataSource={generationHistory}
+                renderItem={(item) => (
+                  <List.Item
+                    actions={[
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={() => {
+                          form.setFieldsValue({
+                            title: item.result.title,
+                            content: item.result.content,
+                          });
+                          if (item.result.media_urls?.length) {
+                            setMediaUrls(item.result.media_urls);
+                          }
+                          messageApi.success("已恢复该次生成结果");
+                          setGenerationHistoryOpen(false);
+                        }}
+                      >
+                        应用
+                      </Button>,
+                      <Button
+                        size="small"
+                        danger
+                        onClick={async () => {
+                          await deleteGenerationHistory(item.id);
+                          setGenerationHistory((prev) =>
+                            prev.filter((r) => r.id !== item.id)
+                          );
+                          messageApi.success("已删除");
+                        }}
+                      >
+                        删除
+                      </Button>,
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={
+                        <Space>
+                          <Tag color="blue">
+                            {item.mode === "structured"
+                              ? "结构化图文"
+                              : item.mode === "full_generation"
+                              ? "全文生成"
+                              : item.mode === "rewrite"
+                              ? "改写"
+                              : "大纲"}
+                          </Tag>
+                          <Typography.Text strong>
+                            {item.result.title || "(无标题)"}
+                          </Typography.Text>
+                        </Space>
+                      }
+                      description={
+                        <div>
+                          <Typography.Paragraph
+                            ellipsis={{ rows: 2 }}
+                            style={{ marginBottom: 4, fontSize: 12 }}
+                            type="secondary"
+                          >
+                            {item.prompt}
+                          </Typography.Paragraph>
+                          <Typography.Text
+                            type="secondary"
+                            style={{ fontSize: 11 }}
+                          >
+                            {new Date(item.created_at).toLocaleString()}
+                          </Typography.Text>
+                        </div>
+                      }
+                    />
+                  </List.Item>
+                )}
+              />
+            )}
+          </Modal>
+
+          <Modal
+            title="内容预览"
+            open={previewOpen}
+            onCancel={() => setPreviewOpen(false)}
+            footer={null}
+            width={580}
+          >
+            <Card
+              style={{
+                borderRadius: 14,
+                overflow: "hidden",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+              }}
+            >
+              <div
+                style={{
+                  height: 180,
+                  background:
+                    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
+                  fontSize: 40,
+                  fontWeight: 700,
+                  borderRadius: "10px 10px 0 0",
+                }}
+              >
+                {form.getFieldValue("title")?.charAt(0) || "?"}
+              </div>
+              <div style={{ padding: "16px 20px" }}>
+                <Typography.Title level={4} style={{ marginBottom: 8 }}>
+                  {form.getFieldValue("title") || "(无标题)"}
+                </Typography.Title>
+                <Typography.Paragraph
+                  type="secondary"
+                  style={{ marginBottom: 12, fontSize: 12 }}
+                >
+                  发布者: 当前用户 · 2026-05-31 · 0 阅读
+                </Typography.Paragraph>
+                <div
+                  style={{
+                    maxHeight: 300,
+                    overflow: "auto",
+                    color: "#374151",
+                    fontSize: 14,
+                    lineHeight: 1.7,
+                  }}
+                >
+                  <RichText
+                    content={form.getFieldValue("content") || "暂无内容"}
+                  />
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 16,
+                    marginTop: 16,
+                    paddingTop: 12,
+                    borderTop: "1px solid #f0f0f0",
+                    color: "#94a3b8",
+                    fontSize: 13,
+                  }}
+                >
+                  <span>{"\u2764"} 0</span>
+                  <span>{"\u2B50"} 0</span>
+                  <span>{"\uD83D\uDC4E"} 0</span>
+                  <span>{"\uD83D\uDCAC"} 0</span>
+                </div>
+              </div>
+            </Card>
+          </Modal>
           <Card className={styles.sideCard} title="素材管理与合规校验">
             <Upload
               name="file"
@@ -1028,12 +1633,20 @@ export default function CreatorPage() {
                       className={styles.materialPreview}
                       src={item.url}
                       alt={item.name}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", item.url);
+                      }}
                     />
                   ) : null}
                   <Space.Compact style={{ width: "100%" }}>
                     <Button
                       block
                       title={item.risk_reason}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", item.url);
+                      }}
                       onClick={() =>
                         setMediaUrls((current) =>
                           Array.from(new Set([...current, item.url]))

@@ -22,6 +22,14 @@
   background: url("../assets/alone.jpg") center top / cover fixed no-repeat;
 }
 
+.workspaceShell {
+  background: linear-gradient(
+      rgba(246, 248, 251, 0.18),
+      rgba(246, 248, 251, 0.2)
+    ),
+    url("../assets/sunshine.jpg") center top / cover fixed no-repeat;
+}
+
 .header {
   position: sticky;
   top: 0;
@@ -97,6 +105,10 @@
   color: #fff;
 }
 
+.searchBar {
+  width: 220px;
+}
+
 .profileDropdown :global(.ant-dropdown-menu) {
   min-width: 220px;
   padding: 8px;
@@ -115,19 +127,24 @@
 }
 
 .profileDropdown :global(.ant-dropdown-menu-item:hover),
-.profileDropdown :global(.ant-dropdown-menu-item:hover .ant-dropdown-menu-title-content),
+.profileDropdown
+  :global(.ant-dropdown-menu-item:hover .ant-dropdown-menu-title-content),
 .profileDropdown :global(.ant-dropdown-menu-submenu-title:hover) {
   color: #fff;
   background: rgba(255, 255, 255, 0.16);
 }
 
 .profileDropdown :global(.ant-dropdown-menu-item-danger),
-.profileDropdown :global(.ant-dropdown-menu-item-danger .ant-dropdown-menu-title-content) {
+.profileDropdown
+  :global(.ant-dropdown-menu-item-danger .ant-dropdown-menu-title-content) {
   color: #ff9b9b;
 }
 
 .profileDropdown :global(.ant-dropdown-menu-item-danger:hover),
-.profileDropdown :global(.ant-dropdown-menu-item-danger:hover .ant-dropdown-menu-title-content) {
+.profileDropdown
+  :global(
+    .ant-dropdown-menu-item-danger:hover .ant-dropdown-menu-title-content
+  ) {
   color: #fff;
   background: rgba(239, 68, 68, 0.36);
 }
@@ -145,4 +162,44 @@
 .fullBleedMain {
   width: 100%;
   padding: 0;
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 0 16px;
+    gap: 12px;
+    height: 56px;
+  }
+
+  .header a,
+  .header button {
+    font-size: 14px;
+  }
+
+  .brand {
+    font-size: 18px;
+    gap: 6px;
+  }
+
+  .brandIcon {
+    height: 28px;
+    width: 28px;
+  }
+
+  .nav {
+    gap: 4px;
+  }
+
+  .nav a {
+    padding: 4px 8px;
+    font-size: 13px;
+  }
+
+  .searchBar {
+    width: 140px;
+  }
+
+  .main {
+    padding: 16px 0 40px;
+  }
 }

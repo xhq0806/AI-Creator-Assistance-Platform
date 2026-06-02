@@ -1,6 +1,6 @@
-import { Button, Dropdown } from "antd";
+import { Button, Dropdown, Input } from "antd";
 import type { MenuProps } from "antd";
-import { DownOutlined } from "@ant-design/icons";
+import { DownOutlined, SearchOutlined } from "@ant-design/icons";
 import { Link, Outlet, history, useLocation, useModel } from "umi";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import CreationIcon from "@/assets/Creation.png";
@@ -13,21 +13,26 @@ export default function Layout() {
     location.pathname === "/index" || location.pathname === "/";
   const isLoginPage = location.pathname === "/login";
   const isCreatorPage = location.pathname.startsWith("/creator");
+  const isWorkspacePage = location.pathname.startsWith("/workspace");
   const isFullBleedPage = isLoginPage;
   const shellClassName = [
     styles.shell,
     isIndexPage ? styles.indexShell : "",
     isLoginPage ? styles.loginShell : "",
     isCreatorPage ? styles.creatorShell : "",
+    isWorkspacePage ? styles.workspaceShell : "",
   ]
     .filter(Boolean)
     .join(" ");
   const userMenuItems: MenuProps["items"] = [
     { key: "settings", label: "账号设置" },
+    { key: "password", label: "修改密码" },
     { key: "nickname", label: "昵称设置" },
     { key: "likes", label: "我的点赞" },
     { key: "favorites", label: "我的收藏" },
     { key: "works", label: "个人作品" },
+    { type: "divider" },
+    { key: "/audit", label: "审核管理" },
     { type: "divider" },
     { key: "switch", label: "切换账号" },
     { key: "logout", label: "退出登录", danger: true },
@@ -36,6 +41,11 @@ export default function Layout() {
   function handleUserMenuClick({ key }: { key: string }) {
     if (key === "switch" || key === "logout") {
       signOut();
+      return;
+    }
+
+    if (key.startsWith("/")) {
+      history.push(key);
       return;
     }
 
@@ -59,7 +69,28 @@ export default function Layout() {
           >
             创作工作台
           </Link>
+          <Link
+            to="/workspace"
+            className={
+              location.pathname.startsWith("/workspace")
+                ? styles.activeNavLink
+                : ""
+            }
+          >
+            资源工作台
+          </Link>
         </nav>
+        <Input.Search
+          className={styles.searchBar}
+          placeholder="搜索文章..."
+          prefix={<SearchOutlined />}
+          allowClear
+          onSearch={(value) => {
+            if (value.trim()) {
+              history.push(`/search?q=${encodeURIComponent(value.trim())}`);
+            }
+          }}
+        />
         {currentUser ? (
           <Dropdown
             menu={{ items: userMenuItems, onClick: handleUserMenuClick }}

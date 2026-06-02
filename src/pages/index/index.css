@@ -63,6 +63,15 @@
 .sentinel {
   height: 56px;
 }
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  max-width: 760px;
+}
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: 1fr;

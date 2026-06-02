@@ -26,7 +26,8 @@ const localRiskRules = [
     level: "HIGH",
     pattern: /(做爱|性交|约炮|裸聊|色情|性爱|强奸|猥亵|露骨性描写)/i,
     reason: "内容包含涉黄或露骨性暗示，不适合生成、发布或作为配图提示词。",
-    safeAlternative: "请改为健康、含蓄的情感互动场景，例如：一个男生和一个女生在温馨自然的场景中交流、牵手或一起看风景。",
+    safeAlternative:
+      "请改为健康、含蓄的情感互动场景，例如：一个男生和一个女生在温馨自然的场景中交流、牵手或一起看风景。",
   },
   {
     category: "GAMBLING",
@@ -85,7 +86,11 @@ function buildLocalRiskResult(rule) {
 
 function normalizeProviderError(message) {
   const text = String(message || "");
-  if (/sensitive information|sensitive content|input text may contain sensitive/i.test(text)) {
+  if (
+    /sensitive information|sensitive content|input text may contain sensitive/i.test(
+      text
+    )
+  ) {
     return "输入内容可能包含敏感、低俗或不适宜生成的描述，已被模型安全策略拦截。请将提示词改为健康、含蓄、非露骨的场景描述后再试。";
   }
   if (/content policy|safety policy|violate/i.test(text)) {
@@ -103,7 +108,9 @@ function isLikelyImageUrl(url) {
     return true;
   }
   // 火山方舟 / 豆包对话生图返回的签名 CDN 链接通常无文件后缀
-  if (/byteimg\.com|volces\.com|volccdn\.com|tos-cn-|ark-project\./i.test(value)) {
+  if (
+    /byteimg\.com|volces\.com|volccdn\.com|tos-cn-|ark-project\./i.test(value)
+  ) {
     return true;
   }
   return false;
@@ -112,7 +119,9 @@ function isLikelyImageUrl(url) {
 function extractMediaUrlsFromText(raw) {
   const text = String(raw || "");
   const dataUrls =
-    text.match(/data:(?:image|video)\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g) || [];
+    text.match(
+      /data:(?:image|video)\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g
+    ) || [];
   const httpUrls = text.match(/https?:\/\/[^\s"'<>，。)）\]]+/g) || [];
 
   return [...dataUrls, ...httpUrls].filter(isLikelyImageUrl);
@@ -194,7 +203,12 @@ function extractMediaUrlsFromResponse(payload) {
     if (Array.isArray(item?.content)) {
       item.content.forEach((part) => {
         pushUrl(part?.text || part?.output_text || part?.content);
-        pushUrl(part?.image_url?.url || part?.image_url || part?.video_url?.url || part?.video_url);
+        pushUrl(
+          part?.image_url?.url ||
+            part?.image_url ||
+            part?.video_url?.url ||
+            part?.video_url
+        );
         pushUrl(part?.url);
       });
     }
@@ -247,10 +261,10 @@ async function callArkResponses({ model, input, instructions, extra = {} }) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail =
-      payload?.error?.message ||
-      payload?.message ||
-      `HTTP ${response.status}`;
-    throw new Error(`火山方舟 REST API 调用失败：${normalizeProviderError(detail)}`);
+      payload?.error?.message || payload?.message || `HTTP ${response.status}`;
+    throw new Error(
+      `火山方舟 REST API 调用失败：${normalizeProviderError(detail)}`
+    );
   }
 
   return payload;
@@ -262,7 +276,11 @@ function buildScenePrompt({ prompt, title, content }) {
     return `${scene}。${IMAGE_STYLE_SUFFIX}`;
   }
 
-  const theme = String(title || "").trim() || String(content || "").trim().slice(0, 160);
+  const theme =
+    String(title || "").trim() ||
+    String(content || "")
+      .trim()
+      .slice(0, 160);
   if (theme) {
     return `根据文章主题绘制配图：${theme}。${IMAGE_STYLE_SUFFIX}`;
   }
@@ -396,7 +414,9 @@ async function generateImageWithModelScope(imagePrompt, { title }) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.message || `ModelScope 文生图提交失败(${response.status})`);
+    throw new Error(
+      payload.message || `ModelScope 文生图提交失败(${response.status})`
+    );
   }
 
   let urls = Array.isArray(payload.output_images) ? payload.output_images : [];
@@ -451,15 +471,11 @@ async function generateImageWithArkImagesApi(imagePrompt, { title }) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail =
-      payload?.error?.message ||
-      payload?.message ||
-      `HTTP ${response.status}`;
+      payload?.error?.message || payload?.message || `HTTP ${response.status}`;
     throw new Error(normalizeArkImageError(`火山方舟文生图失败：${detail}`));
   }
 
-  const urls = (payload.data || [])
-    .map((item) => item?.url)
-    .filter(Boolean);
+  const urls = (payload.data || []).map((item) => item?.url).filter(Boolean);
 
   if (!urls.length) {
     throw new Error("文生图接口未返回图片地址");
@@ -512,7 +528,11 @@ async function isReachableImageUrl(url) {
     return true;
   }
 
-  if (/byteimg\.com|volces\.com|volccdn\.com|tos-cn-|ark-project\./i.test(String(url))) {
+  if (
+    /byteimg\.com|volces\.com|volccdn\.com|tos-cn-|ark-project\./i.test(
+      String(url)
+    )
+  ) {
     return true;
   }
 
@@ -527,7 +547,9 @@ async function isReachableImageUrl(url) {
         "User-Agent": "AI-Creator-Platform/1.0",
       },
     });
-    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    const contentType = (
+      response.headers.get("content-type") || ""
+    ).toLowerCase();
     const looksLikeImage =
       contentType.startsWith("image/") ||
       contentType === "application/octet-stream" ||
@@ -569,7 +591,9 @@ async function chatJson(messages, fallback) {
       .filter((message) => message.role === "system")
       .map((message) => message.content)
       .join("\n\n");
-    const userMessages = messages.filter((message) => message.role !== "system");
+    const userMessages = messages.filter(
+      (message) => message.role !== "system"
+    );
     const payload = await callArkResponses({
       model: ark.textModel,
       instructions: systemMessages,
@@ -588,14 +612,74 @@ async function chatJson(messages, fallback) {
 }
 
 async function generateContent({ prompt, mode, materials = [] }) {
-  const fallback = (reason) => ({
-    title: prompt.slice(0, 24) || "AI 创作草稿",
-    content:
-      reason === "missing_api_key"
-        ? `围绕「${prompt}」生成的内容草稿。当前未配置火山方舟模型密钥，系统已启用本地降级结果。`
-        : `围绕「${prompt}」生成的内容草稿。火山方舟模型已调用，但返回内容不是标准 JSON，系统已启用本地降级结果。`,
-    suggested_tags: ["AI", "创作"],
-  });
+  const fallback = (reason) => {
+    const fallbackTitle = prompt.slice(0, 24) || "AI 创作草稿";
+    if (mode === "structured") {
+      return {
+        title: fallbackTitle,
+        content: `围绕「${prompt}」生成的图文内容。\n\n![img:配图描述：与主题相关的场景](${
+          materials[0] ||
+          "https://picsum.photos/seed/" + Date.now() + "/800/400"
+        })\n\n这是正文的第一段内容，围绕主题展开详细描述。\n\n## 二级标题\n\n进一步深入探讨核心观点，提供有价值的信息和见解。\n\n![img:配图描述：相关示意图](${
+          materials[1] ||
+          "https://picsum.photos/seed/" + (Date.now() + 1) + "/800/400"
+        })\n\n总结全文，强调核心观点，引导读者互动。`,
+        suggested_tags: ["AI", "创作", "图文"],
+        structured_blocks: [
+          { type: "text", content: `围绕「${prompt}」生成的图文内容。` },
+          {
+            type: "image",
+            src:
+              materials[0] ||
+              `https://picsum.photos/seed/${Date.now()}/800/400`,
+            alt: "配图描述：与主题相关的场景",
+          },
+          {
+            type: "text",
+            content: "这是正文的第一段内容，围绕主题展开详细描述。",
+          },
+          { type: "heading", content: "二级标题" },
+          {
+            type: "text",
+            content: "进一步深入探讨核心观点，提供有价值的信息和见解。",
+          },
+          {
+            type: "image",
+            src:
+              materials[1] ||
+              `https://picsum.photos/seed/${Date.now() + 1}/800/400`,
+            alt: "配图描述：相关示意图",
+          },
+          { type: "text", content: "总结全文，强调核心观点，引导读者互动。" },
+        ],
+      };
+    }
+    return {
+      title: fallbackTitle,
+      content:
+        reason === "missing_api_key"
+          ? `围绕「${prompt}」生成的内容草稿。当前未配置火山方舟模型密钥，系统已启用本地降级结果。`
+          : `围绕「${prompt}」生成的内容草稿。火山方舟模型已调用，但返回内容不是标准 JSON，系统已启用本地降级结果。`,
+      suggested_tags: ["AI", "创作"],
+    };
+  };
+
+  if (mode === "structured") {
+    return chatJson(
+      [
+        {
+          role: "system",
+          content:
+            "你是资深新媒体内容策划，擅长短图文创作。请只输出严格 JSON，schema 为：{ title(string), content(string,支持Markdown和![img](url)图片标记), suggested_tags(string[]), structured_blocks(array of {type(string:text|image|heading), content(string), src(string,仅image类型), alt(string,仅image类型)}) }。内容要图文搭配，每段文本后建议插入一张配图，适合图文平台发布，表达清晰、有传播性。如果用户提供了素材(materials数组)，优先使用这些图片URL作为配图。",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({ prompt, mode, materials }),
+        },
+      ],
+      fallback
+    );
+  }
 
   return chatJson(
     [
@@ -690,7 +774,10 @@ async function evaluateRankingPotential({ title, content, quality_score = 0 }) {
     30,
     Math.min(
       92,
-      Math.round((Number(quality_score || 0) * 0.7 + Math.min(content.length / 25, 25)) * 10) / 10
+      Math.round(
+        (Number(quality_score || 0) * 0.7 + Math.min(content.length / 25, 25)) *
+          10
+      ) / 10
     )
   );
   const result = await chatJson(
@@ -713,9 +800,14 @@ async function evaluateRankingPotential({ title, content, quality_score = 0 }) {
   );
 
   return {
-    ai_rank_score: Math.max(0, Math.min(100, Number(result.ai_rank_score || fallbackScore))),
+    ai_rank_score: Math.max(
+      0,
+      Math.min(100, Number(result.ai_rank_score || fallbackScore))
+    ),
     ranking_reason: String(result.ranking_reason || "AI 推荐排序评分"),
-    topic_tags: Array.isArray(result.topic_tags) ? result.topic_tags.slice(0, 6).map(String) : [],
+    topic_tags: Array.isArray(result.topic_tags)
+      ? result.topic_tags.slice(0, 6).map(String)
+      : [],
   };
 }
 

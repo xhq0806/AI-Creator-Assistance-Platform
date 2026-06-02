@@ -74,6 +74,44 @@
 .signOutButton:focus {
   color: #fff;
 }
+.searchBar {
+  width: 220px;
+}
+.profileDropdown :global(.ant-dropdown-menu) {
+  min-width: 220px;
+  padding: 8px;
+  background: rgba(8, 18, 35, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(2, 6, 23, 0.28);
+  backdrop-filter: blur(18px) saturate(145%);
+}
+.profileDropdown :global(.ant-dropdown-menu-item),
+.profileDropdown :global(.ant-dropdown-menu-title-content),
+.profileDropdown :global(.ant-dropdown-menu-submenu-title) {
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+}
+.profileDropdown :global(.ant-dropdown-menu-item:hover),
+.profileDropdown :global(.ant-dropdown-menu-item:hover .ant-dropdown-menu-title-content),
+.profileDropdown :global(.ant-dropdown-menu-submenu-title:hover) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+}
+.profileDropdown :global(.ant-dropdown-menu-item-danger),
+.profileDropdown :global(.ant-dropdown-menu-item-danger .ant-dropdown-menu-title-content) {
+  color: #ff9b9b;
+}
+.profileDropdown :global(.ant-dropdown-menu-item-danger:hover),
+.profileDropdown :global(
+    .ant-dropdown-menu-item-danger:hover .ant-dropdown-menu-title-content
+  ) {
+  color: #fff;
+  background: rgba(239, 68, 68, 0.36);
+}
+.profileDropdown :global(.ant-dropdown-menu-item-divider) {
+  background: rgba(255, 255, 255, 0.16);
+}
 .main {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;

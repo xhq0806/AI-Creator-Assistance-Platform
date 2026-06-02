@@ -136,3 +136,83 @@ pnpm --dir ai-creator-backend run test
 ## 部署建议
 
 前端执行 `pnpm run build` 后产物位于 `dist/`，可部署到静态资源服务或 CDN。后端部署为 Node.js 服务，需配置生产 MySQL、Redis、`JWT_SECRET` 和 AI provider 密钥。生产环境建议通过 Nginx 将 `/api` 反向代理到后端服务，其余路径走前端静态资源。
+
+### 生产环境变量
+
+| 变量                 | 说明                     | 示例                                       |
+| -------------------- | ------------------------ | ------------------------------------------ |
+| `NODE_ENV`           | 运行模式                 | `production`                               |
+| `PORT`               | 后端端口                 | `3000`                                     |
+| `JWT_SECRET`         | JWT 签名密钥（必须修改） | `your-strong-secret-here`                  |
+| `JWT_REFRESH_SECRET` | 刷新令牌密钥（必须修改） | `your-refresh-secret-here`                 |
+| `MYSQL_HOST`         | MySQL 主机               | `127.0.0.1`                                |
+| `MYSQL_PORT`         | MySQL 端口               | `3306`                                     |
+| `MYSQL_DATABASE`     | 数据库名                 | `ai_creator`                               |
+| `MYSQL_USER`         | 数据库用户               | `ai_creator`                               |
+| `MYSQL_PASSWORD`     | 数据库密码               | `strong-password`                          |
+| `REDIS_URL`          | Redis 连接地址           | `redis://127.0.0.1:6379`                   |
+| `AI_PROVIDER`        | AI 提供商                | `ark`                                      |
+| `ARK_API_KEY`        | 火山方舟 API Key         | `ms-your-token`                            |
+| `ARK_BASE_URL`       | 火山方舟基础地址         | `https://ark.cn-beijing.volces.com/api/v3` |
+| `ARK_TEXT_MODEL`     | 文本模型                 | `doubao-seed-2-0-lite-260428`              |
+| `ARK_IMAGE_MODEL`    | 图片模型                 | `doubao-seedream-4-0-250828`               |
+| `ARK_IMAGE_API`      | 图片 API 类型            | `images`                                   |
+| `ARK_VIDEO_MODEL`    | 视频模型（可选）         | `doubao-video-*`                           |
+
+### Docker Compose 一键部署
+
+项目根目录包含 `docker-compose.yml`，实现 MySQL + Redis + 后端的容器化部署：
+
+```bash
+# 构建并启动所有服务
+docker-compose up -d
+
+# 查看服务状态
+docker-compose ps
+
+# 查看后端日志
+docker-compose logs -f backend
+
+# 停止服务
+docker-compose down
+```
+
+### Nginx 配置示例
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    # 前端静态资源
+    root /var/www/aicd-platform/dist;
+    index index.html;
+
+    # API 反向代理
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    # 前端路由（支持 History 模式）
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
+### 验证部署
+
+部署完成后，可以通过以下方式验证服务是否正常运行：
+
+```bash
+# 健康检查
+curl http://your-domain.com/api/v1/health
+
+# 预期返回
+# {"code":200,"data":{"status":"ok"}}
+```

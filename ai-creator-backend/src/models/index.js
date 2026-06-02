@@ -11,6 +11,7 @@ const PromptTemplateVersion = require('./prompt-template-version.model');
 const AuditManualAnnotation = require('./audit-manual-annotation.model');
 const AuditEvaluationReport = require('./audit-evaluation-report.model');
 const UserFeedback = require('./user-feedback.model');
+const GenerationHistory = require('./generation-history.model');
 
 User.hasMany(Article, { foreignKey: 'user_id' });
 Article.belongsTo(User, { foreignKey: 'user_id' });
@@ -43,6 +44,8 @@ User.hasMany(UserFeedback, { foreignKey: 'user_id' });
 UserFeedback.belongsTo(User, { foreignKey: 'user_id' });
 Article.hasMany(UserFeedback, { foreignKey: 'article_id' });
 UserFeedback.belongsTo(Article, { foreignKey: 'article_id' });
+User.hasMany(GenerationHistory, { foreignKey: 'user_id' });
+GenerationHistory.belongsTo(User, { foreignKey: 'user_id' });
 
 async function ensureArticleSchemaUpgrades() {
   const sequelize = User.sequelize;
@@ -72,10 +75,33 @@ async function ensureArticleSchemaUpgrades() {
       }
     }
 
+    if (!articles.category) {
+      await queryInterface.addColumn('articles', 'category', {
+        type: Article.rawAttributes.category.type,
+        allowNull: Article.rawAttributes.category.allowNull ?? true,
+        defaultValue: Article.rawAttributes.category.defaultValue,
+      });
+    }
+
     const indexes = await queryInterface.showIndex('articles');
     if (!indexes.some((index) => index.name === 'idx_ai_rank_status')) {
       await queryInterface.addIndex('articles', ['status', 'ai_rank_score'], {
         name: 'idx_ai_rank_status',
+      });
+    }
+    if (!indexes.some((index) => index.name === 'idx_category')) {
+      await queryInterface.addIndex('articles', ['category'], {
+        name: 'idx_category',
+      });
+    }
+    if (!indexes.some((index) => index.name === 'idx_user_status')) {
+      await queryInterface.addIndex('articles', ['user_id', 'status'], {
+        name: 'idx_user_status',
+      });
+    }
+    if (!indexes.some((index) => index.name === 'idx_status_category')) {
+      await queryInterface.addIndex('articles', ['status', 'category'], {
+        name: 'idx_status_category',
       });
     }
 
@@ -148,11 +174,32 @@ async function ensureMaterialSchemaUpgrades() {
   }
 }
 
+async function ensureAuditReportSchemaUpgrades() {
+  const sequelize = User.sequelize;
+  const queryInterface = sequelize.getQueryInterface();
+
+  try {
+    const reports = await queryInterface.describeTable('audit_evaluation_reports');
+    const jsonColumns = ['per_category_metrics', 'per_risk_level_metrics', 'confusion_matrix'];
+    for (const column of jsonColumns) {
+      if (!reports[column]) {
+        await queryInterface.addColumn('audit_evaluation_reports', column, {
+          type: AuditEvaluationReport.rawAttributes[column].type,
+          allowNull: true,
+        });
+      }
+    }
+  } catch (error) {
+    console.warn('[schema] audit evaluation report upgrade skipped:', error.message);
+  }
+}
+
 async function syncModels() {
   await User.sequelize.sync();
   await ensureArticleSchemaUpgrades();
   await ensurePromptTemplateSchemaUpgrades();
   await ensureMaterialSchemaUpgrades();
+  await ensureAuditReportSchemaUpgrades();
 
   const admin = await User.findOne({ where: { username: 'admin' } });
   if (!admin) {
@@ -210,5 +257,6 @@ module.exports = {
   AuditManualAnnotation,
   AuditEvaluationReport,
   UserFeedback,
+  GenerationHistory,
   syncModels,
 };

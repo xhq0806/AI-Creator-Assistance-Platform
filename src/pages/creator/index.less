@@ -82,6 +82,51 @@
   font-weight: 700;
 }
 
+.editorWrap {
+  position: relative;
+}
+
+.editorToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 6px;
+  padding: 4px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  align-items: center;
+}
+
+.toolbarBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 30px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 14px;
+  font-family: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.toolbarBtn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.toolbarHint {
+  margin-left: auto;
+  padding-right: 4px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
 .promptList {
   width: 100%;
 }

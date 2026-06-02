@@ -11,6 +11,7 @@ export type ArticleDraft = {
   title: string;
   content: string;
   media_urls?: string[];
+  category?: string;
   status?: "draft" | "pending_review" | "published" | "rejected" | "withdrawn";
   quality_score?: number;
 };
@@ -29,6 +30,7 @@ export type HotArticle = Required<
   user_id: number;
   cover_url?: string;
   author?: { id: number; username: string };
+  category?: string;
   created_at?: string;
   updated_at?: string;
   view_count: number;
@@ -141,6 +143,27 @@ export type AuditEvaluationReportItem = {
   precision_rate: number;
   recall_rate: number;
   f1_score: number;
+  per_category_metrics?: Record<
+    string,
+    {
+      accuracy: number;
+      precision: number;
+      recall: number;
+      f1: number;
+      total: number;
+    }
+  >;
+  per_risk_level_metrics?: Record<
+    string,
+    {
+      accuracy: number;
+      precision: number;
+      recall: number;
+      f1: number;
+      total: number;
+    }
+  >;
+  confusion_matrix?: Record<string, Record<string, number>>;
   report_generated_at?: string;
 };
 
@@ -149,10 +172,17 @@ async function requestJson<T>(
   options: RequestInit & {
     data?: unknown;
     params?: Record<string, unknown>;
+    skipRefresh?: boolean;
   } = {}
 ) {
   const rawUser = window.localStorage.getItem("ai_creator_user");
-  const token = rawUser ? (JSON.parse(rawUser) as CurrentUser).token : "";
+  let user: CurrentUser | null = null;
+  try {
+    user = rawUser ? (JSON.parse(rawUser) as CurrentUser) : null;
+  } catch {
+    user = null;
+  }
+  const token = user?.token || "";
   const searchParams = new URLSearchParams();
 
   Object.entries(options.params || {}).forEach(([key, value]) => {
@@ -173,13 +203,73 @@ async function requestJson<T>(
       body: options.data ? JSON.stringify(options.data) : options.body,
     }
   );
-  const payload = (await response.json()) as ApiResponse<T>;
+  let payload: ApiResponse<T>;
+  try {
+    payload = (await response.json()) as ApiResponse<T>;
+  } catch (e) {
+    throw new Error("响应解析失败");
+  }
+
+  if (response.status === 401 && user?.refreshToken && !options.skipRefresh) {
+    try {
+      const refreshResponse = await fetch("/api/v1/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: user.refreshToken }),
+      });
+      const refreshPayload = await refreshResponse.json();
+      if (refreshResponse.ok && refreshPayload.code === 200) {
+        const refreshed = refreshPayload.data as CurrentUser;
+        window.localStorage.setItem(
+          "ai_creator_user",
+          JSON.stringify(refreshed)
+        );
+        const retryResponse = await fetch(
+          `${url}${searchParams.size ? `?${searchParams.toString()}` : ""}`,
+          {
+            ...options,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${refreshed.token}`,
+              ...options.headers,
+            },
+            body: options.data ? JSON.stringify(options.data) : options.body,
+          }
+        );
+        const retryPayload = (await retryResponse.json()) as ApiResponse<T>;
+        if (!retryResponse.ok || retryPayload.code !== 200) {
+          throw new Error(retryPayload.message || "请求失败");
+        }
+        return retryPayload;
+      }
+    } catch {
+      // refresh failed, fall through to error
+    }
+    window.localStorage.removeItem("ai_creator_user");
+    window.location.href = "/login";
+    throw new Error("登录已过期，请重新登录");
+  }
 
   if (!response.ok || payload.code !== 200) {
     throw new Error(payload.message || "请求失败");
   }
 
   return payload;
+}
+
+export async function refreshAuthToken() {
+  const rawUser = window.localStorage.getItem("ai_creator_user");
+  const user = rawUser ? (JSON.parse(rawUser) as CurrentUser) : null;
+  if (!user?.refreshToken) {
+    throw new Error("无 refresh token");
+  }
+  const response = await requestJson<CurrentUser>("/api/v1/auth/refresh", {
+    method: "POST",
+    data: { refreshToken: user.refreshToken },
+    skipRefresh: true,
+  });
+  window.localStorage.setItem("ai_creator_user", JSON.stringify(response.data));
+  return response.data;
 }
 
 export async function login(payload: { account: string; password: string }) {
@@ -205,11 +295,27 @@ export async function register(payload: {
   return response.data;
 }
 
-export async function generateContent(payload: {
+export type GenerationRecord = {
+  id: string;
   prompt: string;
-  mode: "full_generation" | "rewrite" | "outline";
-  materials?: string[];
-}, signal?: AbortSignal) {
+  mode: string;
+  result: {
+    title: string;
+    content: string;
+    suggested_tags?: string[];
+    media_urls?: string[];
+  };
+  created_at: string;
+};
+
+export async function generateContent(
+  payload: {
+    prompt: string;
+    mode: "full_generation" | "rewrite" | "outline" | "structured";
+    materials?: string[];
+  },
+  signal?: AbortSignal
+) {
   const response = await requestJson<{
     title: string;
     content: string;
@@ -223,12 +329,15 @@ export async function generateContent(payload: {
   return response.data;
 }
 
-export async function generateImage(payload: {
-  prompt?: string;
-  title?: string;
-  content?: string;
-  materials?: string[];
-}) {
+export async function generateImage(
+  payload: {
+    prompt?: string;
+    title?: string;
+    content?: string;
+    materials?: string[];
+  },
+  signal?: AbortSignal
+) {
   const response = await requestJson<{
     media_urls: string[];
     cover_prompt: string;
@@ -238,17 +347,21 @@ export async function generateImage(payload: {
   }>("/api/v1/ai/generate-image", {
     method: "POST",
     data: payload,
+    signal,
   });
 
   return response.data;
 }
 
-export async function generateVideo(payload: {
-  prompt?: string;
-  title?: string;
-  content?: string;
-  materials?: string[];
-}) {
+export async function generateVideo(
+  payload: {
+    prompt?: string;
+    title?: string;
+    content?: string;
+    materials?: string[];
+  },
+  signal?: AbortSignal
+) {
   const response = await requestJson<{
     media_urls: string[];
     video_prompt: string;
@@ -257,6 +370,7 @@ export async function generateVideo(payload: {
   }>("/api/v1/ai/generate-video", {
     method: "POST",
     data: payload,
+    signal,
   });
 
   return response.data;
@@ -290,6 +404,22 @@ export async function evaluateQuality(
   return response.data;
 }
 
+export async function fetchGenerationHistory() {
+  const response = await requestJson<GenerationRecord[]>(
+    "/api/v1/ai/generation-history",
+    { method: "GET" }
+  );
+  return response.data;
+}
+
+export async function deleteGenerationHistory(id: string) {
+  const response = await requestJson<{ deleted: boolean }>(
+    `/api/v1/ai/generation-history/${id}`,
+    { method: "DELETE" }
+  );
+  return response.data;
+}
+
 export async function fetchPromptTemplates() {
   const response = await requestJson<PromptTemplate[]>("/api/v1/prompts", {
     method: "GET",
@@ -306,6 +436,17 @@ export async function createPromptTemplate(
     data: payload,
   });
 
+  return response.data;
+}
+
+export async function updatePromptTemplate(
+  id: number,
+  payload: { name?: string; category?: string; content?: string }
+) {
+  const response = await requestJson<PromptTemplate>(`/api/v1/prompts/${id}`, {
+    method: "PUT",
+    data: payload,
+  });
   return response.data;
 }
 
@@ -359,14 +500,17 @@ export async function deleteMaterial(id: number) {
   return response.data;
 }
 
-export async function saveDraft(payload: ArticleDraft & { auto_fix?: boolean }) {
-  const response = await requestJson<ArticleDraft & { id: number; auto_fixed?: boolean }>(
-    "/api/v1/articles/draft",
-    {
-      method: "POST",
-      data: payload,
-    }
-  );
+export async function saveDraft(
+  payload: ArticleDraft & { auto_fix?: boolean },
+  signal?: AbortSignal
+) {
+  const response = await requestJson<
+    ArticleDraft & { id: number; auto_fixed?: boolean }
+  >("/api/v1/articles/draft", {
+    method: "POST",
+    data: payload,
+    signal,
+  });
 
   return response.data;
 }
@@ -479,10 +623,28 @@ export async function updateMyProfile(payload: {
   return response.data;
 }
 
+export async function changeMyPassword(payload: {
+  oldPassword: string;
+  newPassword: string;
+}) {
+  const response = await requestJson<{ message: string }>(
+    "/api/v1/users/me/password",
+    {
+      method: "POST",
+      data: payload,
+    }
+  );
+
+  return response.data;
+}
+
 export async function fetchMyArticles() {
-  const response = await requestJson<HotArticle[]>("/api/v1/users/me/articles", {
-    method: "GET",
-  });
+  const response = await requestJson<HotArticle[]>(
+    "/api/v1/users/me/articles",
+    {
+      method: "GET",
+    }
+  );
 
   return response.data;
 }
@@ -512,15 +674,90 @@ export async function syncOfflineDrafts(
   return response.data;
 }
 
-export async function fetchHotArticles(cursor?: string) {
+export async function fetchHotArticles(params?: {
+  cursor?: string;
+  category?: string;
+  time_range?: string;
+}) {
   const response = await requestJson<{
     list: HotArticle[];
     nextCursor?: string;
   }>("/api/v1/rank/hot", {
     method: "GET",
-    params: { cursor, limit: 10 },
+    params: {
+      cursor: params?.cursor,
+      limit: 10,
+      category: params?.category,
+      time_range: params?.time_range,
+    },
   });
 
+  return response.data;
+}
+
+export async function searchArticles(q: string) {
+  const response = await requestJson<HotArticle[]>("/api/v1/articles/search", {
+    method: "GET",
+    params: { q },
+  });
+  return response.data;
+}
+
+export async function fetchAuditAnnotations(params?: {
+  risk_category?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const response = await requestJson<{
+    total: number;
+    list: AuditManualAnnotationItem[];
+  }>("/api/v1/audit/annotations", {
+    method: "GET",
+    params: params as Record<string, unknown>,
+  });
+  return response.data;
+}
+
+export async function deleteAuditAnnotation(id: number) {
+  const response = await requestJson<{ deleted: boolean }>(
+    `/api/v1/audit/annotations/${id}`,
+    { method: "DELETE" }
+  );
+  return response.data;
+}
+
+export async function seedAuditSamples(clearExisting?: boolean) {
+  const response = await requestJson<{ created: number }>(
+    "/api/v1/audit/seed-samples",
+    {
+      method: "POST",
+      data: { clear_existing: !!clearExisting },
+    }
+  );
+  return response.data;
+}
+
+export async function generateAuditReport() {
+  const response = await requestJson<AuditEvaluationReportItem>(
+    "/api/v1/audit/evaluation/report",
+    { method: "POST" }
+  );
+  return response.data;
+}
+
+export async function fetchAuditReports() {
+  const response = await requestJson<AuditEvaluationReportItem[]>(
+    "/api/v1/audit/evaluation/reports",
+    { method: "GET" }
+  );
+  return response.data;
+}
+
+export async function fetchAuditReportDetail(id: number) {
+  const response = await requestJson<AuditEvaluationReportItem>(
+    `/api/v1/audit/evaluation/reports/${id}`,
+    { method: "GET" }
+  );
   return response.data;
 }
 

@@ -149,3 +149,15 @@ CREATE TABLE IF NOT EXISTS `audit_evaluation_reports` (
   `f1_score` DECIMAL(7,6) NOT NULL,
   `report_generated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `generation_histories` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `prompt` TEXT NOT NULL,
+  `mode` VARCHAR(50) NOT NULL DEFAULT 'full_generation',
+  `result` JSON NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`),
+  INDEX `idx_gen_user_id` (`user_id`),
+  INDEX `idx_gen_user_created` (`user_id`, `created_at` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,8 +1,8 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/database");
 
 const Article = sequelize.define(
-  'Article',
+  "Article",
   {
     id: {
       type: DataTypes.BIGINT.UNSIGNED,
@@ -18,7 +18,7 @@ const Article = sequelize.define(
       allowNull: false,
     },
     content: {
-      type: DataTypes.TEXT('long'),
+      type: DataTypes.TEXT("long"),
       allowNull: false,
     },
     media_urls: {
@@ -26,8 +26,14 @@ const Article = sequelize.define(
       allowNull: true,
     },
     status: {
-      type: DataTypes.ENUM('draft', 'pending_review', 'published', 'rejected', 'withdrawn'),
-      defaultValue: 'draft',
+      type: DataTypes.ENUM(
+        "draft",
+        "pending_review",
+        "published",
+        "rejected",
+        "withdrawn"
+      ),
+      defaultValue: "draft",
     },
     quality_score: {
       type: DataTypes.DECIMAL(5, 2),
@@ -47,7 +53,7 @@ const Article = sequelize.define(
     },
     ai_rank_reason: {
       type: DataTypes.STRING(512),
-      defaultValue: '',
+      defaultValue: "",
     },
     ai_rank_tags: {
       type: DataTypes.JSON,
@@ -69,16 +75,33 @@ const Article = sequelize.define(
       type: DataTypes.INTEGER.UNSIGNED,
       defaultValue: 0,
     },
+    category: {
+      type: DataTypes.STRING(32),
+      defaultValue: "通用",
+      index: true,
+    },
   },
   {
-    tableName: 'articles',
+    tableName: "articles",
     indexes: [
       {
-        name: 'idx_quality_status',
-        fields: ['status', 'quality_score'],
+        name: "idx_quality_status",
+        fields: ["status", "quality_score"],
+      },
+      {
+        name: "idx_user_status",
+        fields: ["user_id", "status"],
+      },
+      {
+        name: "idx_status_category",
+        fields: ["status", "category"],
+      },
+      {
+        name: "idx_status_rank",
+        fields: ["status", "ai_rank_score"],
       },
     ],
-  },
+  }
 );
 
 module.exports = Article;

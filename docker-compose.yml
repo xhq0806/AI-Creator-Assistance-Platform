@@ -1,0 +1,75 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: aicd-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: ai_creator
+      MYSQL_USER: ai_creator
+      MYSQL_PASSWORD: ai_creator_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aicd-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./ai-creator-backend
+      dockerfile: Dockerfile
+    container_name: aicd-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: change-this-to-a-strong-secret
+      JWT_REFRESH_SECRET: change-this-refresh-secret
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ai_creator
+      MYSQL_USER: ai_creator
+      MYSQL_PASSWORD: ai_creator_pass
+      REDIS_URL: redis://redis:6379
+      AI_PROVIDER: ark
+      ARK_API_KEY: ""
+      ARK_BASE_URL: https://ark.cn-beijing.volces.com/api/v3
+      ARK_TEXT_MODEL: doubao-seed-2-0-lite-260428
+      ARK_IMAGE_MODEL: doubao-seedream-4-0-250828
+      ARK_IMAGE_API: images
+      ARK_VIDEO_MODEL: ""
+      ARK_VIDEO_API: responses
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  mysql_data:

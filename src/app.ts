@@ -4,6 +4,7 @@ export interface CurrentUser {
   phone?: string;
   email?: string;
   token: string;
+  refreshToken?: string;
 }
 
 export async function getInitialState() {
