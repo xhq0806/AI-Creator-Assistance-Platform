@@ -308,17 +308,44 @@ function MaterialsTab() {
           file_name: file.name,
           file_type: file.type,
         });
-        const uploadResponse = await fetch(cred.upload_url, {
-          method: "PUT",
-          body: file,
-          headers: { "Content-Type": file.type || "application/octet-stream" },
-        });
-        if (!uploadResponse.ok) throw new Error("上传失败");
-        const result = await confirmUpload({
-          material_id: cred.material_id!,
-          file_size: file.size,
-          mime_type: file.type,
-        });
+
+        if (cred.provider === "mock_demo") {
+          // Mock 模式：直接 POST 文件到后端本地存储
+          const token = (() => {
+            try {
+              const raw = window.localStorage.getItem("ai_creator_user");
+              return raw ? JSON.parse(raw).token || "" : "";
+            } catch {
+              return "";
+            }
+          })();
+          const uploadResponse = await fetch(
+            `${cred.upload_url}?material_id=${cred.material_id}&file_name=${encodeURIComponent(file.name)}`,
+            {
+              method: "POST",
+              body: file,
+              headers: {
+                "Content-Type": file.type || "application/octet-stream",
+                Authorization: token ? `Bearer ${token}` : "",
+              },
+            }
+          );
+          if (!uploadResponse.ok) throw new Error("上传失败");
+        } else {
+          // 云存储模式：PUT 到预签名 URL 后通知后端确认
+          const uploadResponse = await fetch(cred.upload_url, {
+            method: "PUT",
+            body: file,
+            headers: { "Content-Type": file.type || "application/octet-stream" },
+          });
+          if (!uploadResponse.ok) throw new Error("上传失败");
+          await confirmUpload({
+            material_id: cred.material_id!,
+            file_size: file.size,
+            mime_type: file.type,
+          });
+        }
+
         messageApi.success(`素材 "${file.name}" 上传成功`);
         loadMaterials();
       } catch (error) {

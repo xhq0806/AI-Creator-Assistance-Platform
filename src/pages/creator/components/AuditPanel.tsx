@@ -9,7 +9,7 @@ type AuditPanelProps = {
 
 export default function AuditPanel({ auditResult, onApplySafeAlternative }: AuditPanelProps) {
   return (
-    <Card className={styles.sideCard} title="审核免疫系统">
+    <Card className={styles.sideCard} title="安全审核">
       {auditResult ? (
         <Alert
           className={styles.auditResult}
@@ -37,7 +37,7 @@ export default function AuditPanel({ auditResult, onApplySafeAlternative }: Audi
         />
       ) : (
         <Typography.Paragraph className={styles.whiteText}>
-          审核会从涉黄、涉赌、涉毒、敏感信息四个维度返回结构化 JSON 结果。
+          点击「安全审核」按钮，自动检测内容是否涉及违规信息，保障发布安全。
         </Typography.Paragraph>
       )}
     </Card>

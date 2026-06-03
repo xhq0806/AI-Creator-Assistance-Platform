@@ -720,11 +720,11 @@ export default function CreatorPage() {
           {/* 质量评估面板 */}
           <QualityPanel qualityResult={qualityResult} />
 
-          {/* 离线策略提示 */}
-          <Card className={styles.sideCard} title="离线策略">
+          {/* 离线保护 */}
+          <Card className={styles.sideCard} title="离线保护">
             <Typography.Paragraph>
-              在线状态每 30 秒自动保存至后端；离线时每次输入都会落入
-              IndexedDB，恢复网络后静默增量同步。
+              在线时每 30 秒自动保存至云端；离线时内容暂存本地，
+              网络恢复后自动同步，无需担心意外丢失。
             </Typography.Paragraph>
           </Card>
         </Space>

@@ -20,6 +20,11 @@
   background: transparent;
 }
 
+/* 表单间距缩减为默认的一半（24px → 12px） */
+.loginCard :global(.ant-form-item) {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 760px) {
   .loginCard {
     transform: none;

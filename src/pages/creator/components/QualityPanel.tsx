@@ -30,7 +30,7 @@ export default function QualityPanel({ qualityResult }: QualityPanelProps) {
         </div>
       ) : (
         <Typography.Paragraph className={styles.whiteText}>
-          发布时会自动评分，也可以在编辑过程中手动查看结构、深度、流畅度等子分。
+          从结构、深度、流畅度等维度综合打分，帮助你了解内容质量并及时优化。
         </Typography.Paragraph>
       )}
     </Card>

@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
+const path = require("path");
+const fs = require("fs");
 const rateLimit = require("express-rate-limit");
 const { port, isProduction } = require("./config/env");
 const { syncModels } = require("./models");
@@ -51,6 +53,11 @@ app.use(
     legacyHeaders: false,
   })
 );
+
+// ── 本地文件服务（开发/测试环境素材上传）─────────────────────
+const uploadsDir = path.join(__dirname, "..", "uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+app.use("/uploads", express.static(uploadsDir));
 
 // ── 增强健康检查 ────────────────────────────────────────────
 async function checkDatabaseHealth() {
@@ -211,6 +218,12 @@ app.post(
   requireAuth,
   validate("confirmUpload"),
   uploadController.confirmUpload
+);
+app.post(
+  "/api/v1/upload/mock-file",
+  requireAuth,
+  express.raw({ type: "*/*", limit: "20mb" }),
+  uploadController.uploadMockFile
 );
 
 // ── Prompt 团队路由 ─────────────────────────────────────────

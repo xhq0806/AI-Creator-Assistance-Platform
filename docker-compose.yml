@@ -1,14 +1,15 @@
+version: "3.8"
+
 services:
-  # ── MySQL 数据库 ────────────────────────────────────────────
   mysql:
     image: mysql:8.0
     container_name: aicd-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-ai_creator}
-      MYSQL_USER: ${MYSQL_USER:-ai_creator}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ai_creator_pass}
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: ai_creator
+      MYSQL_USER: ai_creator
+      MYSQL_PASSWORD: ai_creator_pass
     ports:
       - "3307:3306"
     volumes:
@@ -19,57 +20,45 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Redis 缓存 ──────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: aicd-redis
     restart: unless-stopped
     ports:
       - "6380:6379"
-    volumes:
-      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
 
-  # ── 后端 Express API ────────────────────────────────────────
   backend:
     build:
       context: ./ai-creator-backend
       dockerfile: Dockerfile
     container_name: aicd-backend
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_SECRET: change-this-to-a-strong-secret
+      JWT_REFRESH_SECRET: change-this-refresh-secret
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-ai_creator}
-      MYSQL_USER: ${MYSQL_USER:-ai_creator}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ai_creator_pass}
+      MYSQL_DATABASE: ai_creator
+      MYSQL_USER: ai_creator
+      MYSQL_PASSWORD: ai_creator_pass
       REDIS_URL: redis://redis:6379
-      AI_PROVIDER: ${AI_PROVIDER:-ark}
-      AI_TIMEOUT_MS: 120000
-      ARK_API_KEY: ${ARK_API_KEY}
-      ARK_BASE_URL: ${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}
-      ARK_TEXT_MODEL: ${ARK_TEXT_MODEL:-doubao-seed-2-0-lite-260428}
-      ARK_IMAGE_MODEL: ${ARK_IMAGE_MODEL:-doubao-seedream-4-0-250828}
-      ARK_IMAGE_API: ${ARK_IMAGE_API:-images}
-      ARK_VIDEO_MODEL: ${ARK_VIDEO_MODEL:-}
-      ARK_VIDEO_API: ${ARK_VIDEO_API:-responses}
-      CLOUD_PROVIDER: ${CLOUD_PROVIDER:-mock}
-      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
-      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
-      OSS_BUCKET: ${OSS_BUCKET:-ai-creator}
-      OSS_REGION: ${OSS_REGION:-oss-cn-hangzhou}
-      MODELSCOPE_API_TOKEN: ${MODELSCOPE_API_TOKEN:-}
-      MODELSCOPE_BASE_URL: ${MODELSCOPE_BASE_URL:-https://api-inference.modelscope.cn/v1}
-      MODELSCOPE_TEXT_MODEL: ${MODELSCOPE_TEXT_MODEL:-Qwen/Qwen3-235B-A22B-Instruct-2507}
-      MODELSCOPE_IMAGE_MODEL: ${MODELSCOPE_IMAGE_MODEL:-Qwen/Qwen-Image}
+      AI_PROVIDER: ark
+      ARK_API_KEY: ""
+      ARK_BASE_URL: https://ark.cn-beijing.volces.com/api/v3
+      ARK_TEXT_MODEL: doubao-seed-2-0-lite-260428
+      ARK_IMAGE_MODEL: doubao-seedream-4-0-250828
+      ARK_IMAGE_API: images
+      ARK_VIDEO_MODEL: ""
+      ARK_VIDEO_API: responses
     depends_on:
       mysql:
         condition: service_healthy
@@ -82,25 +71,5 @@ services:
       retries: 3
       start_period: 20s
 
-  # ── 前端 Nginx ──────────────────────────────────────────────
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: aicd-frontend
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
 volumes:
   mysql_data:
-  redis_data:
