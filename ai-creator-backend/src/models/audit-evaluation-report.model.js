@@ -9,6 +9,11 @@ const AuditEvaluationReport = sequelize.define(
       autoIncrement: true,
       primaryKey: true,
     },
+    user_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true,
+      comment: '生成报告的用户 ID',
+    },
     total_samples: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,

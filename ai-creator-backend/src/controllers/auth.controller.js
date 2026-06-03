@@ -6,7 +6,7 @@ const { jwtSecret, jwtRefreshSecret } = require("../config/env");
 const { ok } = require("../utils/apiResponse");
 
 function signTokens(user) {
-  const payload = { id: Number(user.id), username: user.username };
+  const payload = { id: Number(user.id), username: user.username, role: user.role || 'user' };
   const token = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
   const refreshToken = jwt.sign(payload, jwtRefreshSecret, { expiresIn: "7d" });
   return {
@@ -14,6 +14,8 @@ function signTokens(user) {
     username: user.username,
     phone: user.phone,
     email: user.email,
+    role: user.role || 'user',
+    status: user.status || 'active',
     token,
     refreshToken,
   };
@@ -38,6 +40,11 @@ async function login(req, res, next) {
 
     if (!matched) {
       return res.status(401).json({ code: 401, message: "用户名或密码错误" });
+    }
+
+    // Check if user is disabled
+    if (user.status === 'disabled') {
+      return res.status(403).json({ code: 403, message: '账号已被禁用，请联系管理员' });
     }
 
     return ok(res, signTokens(user));

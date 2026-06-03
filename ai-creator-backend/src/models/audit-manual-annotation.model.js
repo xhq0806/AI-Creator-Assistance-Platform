@@ -30,7 +30,7 @@ const AuditManualAnnotation = sequelize.define(
       allowNull: false,
     },
     risk_category: {
-      type: DataTypes.ENUM('NONE', 'PORN', 'GAMBLING', 'DRUG', 'POLITICAL', 'OTHER'),
+      type: DataTypes.ENUM('NONE', 'PORN', 'GAMBLING', 'DRUG', 'POLITICAL', 'VIOLENCE_TERROR', 'PRIVACY', 'MINOR_RISK', 'FAKE_MARKETING', 'OTHER'),
       allowNull: false,
       defaultValue: 'NONE',
     },

@@ -1,12 +1,37 @@
 const dotenv = require("dotenv");
+const crypto = require("crypto");
 
 dotenv.config();
 
+const isProduction = process.env.NODE_ENV === "production";
+
+function requireProductionSecret(name, defaultValue) {
+  const value = process.env[name] || defaultValue;
+  if (isProduction && (!value || value === defaultValue || value.startsWith("local-dev-"))) {
+    console.error(
+      `[security] FATAL: ${name} 使用了默认值或开发密钥。` +
+        `生产环境必须通过环境变量 ${name} 设置至少 32 字符的随机强密钥。`
+    );
+    process.exit(1);
+  }
+  return value;
+}
+
 module.exports = {
+  isProduction,
   port: Number(process.env.PORT || 3000),
-  jwtSecret: process.env.JWT_SECRET || "local-dev-secret",
-  jwtRefreshSecret:
-    process.env.JWT_REFRESH_SECRET || "local-dev-refresh-secret",
+  jwtSecret: requireProductionSecret(
+    "JWT_SECRET",
+    process.env.NODE_ENV !== "production"
+      ? "local-dev-secret-" + crypto.randomBytes(4).toString("hex")
+      : undefined
+  ),
+  jwtRefreshSecret: requireProductionSecret(
+    "JWT_REFRESH_SECRET",
+    process.env.NODE_ENV !== "production"
+      ? "local-dev-refresh-secret-" + crypto.randomBytes(4).toString("hex")
+      : undefined
+  ),
   mysql: {
     host: process.env.MYSQL_HOST || "127.0.0.1",
     port: Number(process.env.MYSQL_PORT || 3306),

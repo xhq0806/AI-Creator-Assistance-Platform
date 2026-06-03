@@ -3,6 +3,8 @@ export interface CurrentUser {
   username: string;
   phone?: string;
   email?: string;
+  role: 'user' | 'editor' | 'admin';
+  status?: 'active' | 'disabled';
   token: string;
   refreshToken?: string;
 }

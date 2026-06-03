@@ -4,40 +4,45 @@ const { ok } = require("../utils/apiResponse");
 
 const MAX_HISTORY_PER_USER = 20;
 
+async function saveHistory(user, prompt, mode, result) {
+  if (!user || !prompt) return;
+
+  await GenerationHistory.create({
+    user_id: user.id,
+    prompt,
+    mode,
+    result,
+  });
+
+  const count = await GenerationHistory.count({
+    where: { user_id: user.id },
+  });
+  if (count > MAX_HISTORY_PER_USER) {
+    const excessRecords = await GenerationHistory.findAll({
+      where: { user_id: user.id },
+      order: [["created_at", "DESC"]],
+      offset: MAX_HISTORY_PER_USER,
+      attributes: ["id"],
+    });
+    if (excessRecords.length > 0) {
+      await GenerationHistory.destroy({
+        where: {
+          id: excessRecords.map((r) => r.id),
+        },
+      });
+    }
+  }
+}
+
 async function generate(req, res, next) {
   try {
     const result = await aiService.generateContent(req.body);
-    if (req.user && req.body.prompt) {
-      await GenerationHistory.create({
-        user_id: req.user.id,
-        prompt: req.body.prompt,
-        mode: req.body.mode || "full_generation",
-        result: {
-          title: result.title,
-          content: result.content,
-          suggested_tags: result.suggested_tags,
-          media_urls: req.body.materials || [],
-        },
-      });
-      const count = await GenerationHistory.count({
-        where: { user_id: req.user.id },
-      });
-      if (count > MAX_HISTORY_PER_USER) {
-        const excessRecords = await GenerationHistory.findAll({
-          where: { user_id: req.user.id },
-          order: [["created_at", "DESC"]],
-          offset: MAX_HISTORY_PER_USER,
-          attributes: ["id"],
-        });
-        if (excessRecords.length > 0) {
-          await GenerationHistory.destroy({
-            where: {
-              id: excessRecords.map((r) => r.id),
-            },
-          });
-        }
-      }
-    }
+    await saveHistory(req.user, req.body.prompt, req.body.mode || "full_generation", {
+      title: result.title,
+      content: result.content,
+      suggested_tags: result.suggested_tags,
+      media_urls: req.body.materials || [],
+    });
     return ok(res, result);
   } catch (error) {
     return next(error);
@@ -76,9 +81,33 @@ async function deleteGenerationHistory(req, res, next) {
   }
 }
 
+async function mergeMediaIntoRecentHistory(user, mediaUrls) {
+  if (!user || !mediaUrls?.length) return;
+
+  const recent = await GenerationHistory.findOne({
+    where: { user_id: user.id },
+    order: [["created_at", "DESC"]],
+  });
+
+  if (recent) {
+    const existing = recent.result?.media_urls || [];
+    const merged = [...new Set([...existing, ...mediaUrls])];
+    await recent.update({
+      result: { ...recent.result, media_urls: merged },
+    });
+  } else {
+    await saveHistory(user, "素材生成", "full_generation", {
+      title: "",
+      content: "",
+      media_urls: mediaUrls,
+    });
+  }
+}
+
 async function generateImage(req, res, next) {
   try {
     const result = await aiService.generateImage(req.body);
+    await mergeMediaIntoRecentHistory(req.user, result.media_urls);
     return ok(res, result);
   } catch (error) {
     return next(error);
@@ -88,6 +117,7 @@ async function generateImage(req, res, next) {
 async function generateVideo(req, res, next) {
   try {
     const result = await aiService.generateVideo(req.body);
+    await mergeMediaIntoRecentHistory(req.user, result.media_urls);
     return ok(res, result);
   } catch (error) {
     return next(error);

@@ -13,6 +13,18 @@ const AuditLog = sequelize.define(
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: true,
     },
+    reviewer_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true,
+    },
+    action: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    detail: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+    },
     risk_category: DataTypes.STRING(50),
     is_compliant: {
       type: DataTypes.BOOLEAN,

@@ -38,8 +38,10 @@ User.hasMany(PromptTemplateVersion, { foreignKey: 'created_by' });
 PromptTemplateVersion.belongsTo(User, { foreignKey: 'created_by' });
 Article.hasMany(AuditManualAnnotation, { foreignKey: 'article_id' });
 AuditManualAnnotation.belongsTo(Article, { foreignKey: 'article_id' });
-User.hasMany(AuditManualAnnotation, { foreignKey: 'annotator_id' });
-AuditManualAnnotation.belongsTo(User, { foreignKey: 'annotator_id' });
+User.hasMany(AuditManualAnnotation, { foreignKey: 'annotator_id', as: 'annotations' });
+AuditManualAnnotation.belongsTo(User, { foreignKey: 'annotator_id', as: 'annotator' });
+User.hasMany(AuditEvaluationReport, { foreignKey: 'user_id' });
+AuditEvaluationReport.belongsTo(User, { foreignKey: 'user_id' });
 User.hasMany(UserFeedback, { foreignKey: 'user_id' });
 UserFeedback.belongsTo(User, { foreignKey: 'user_id' });
 Article.hasMany(UserFeedback, { foreignKey: 'article_id' });
@@ -80,6 +82,13 @@ async function ensureArticleSchemaUpgrades() {
         type: Article.rawAttributes.category.type,
         allowNull: Article.rawAttributes.category.allowNull ?? true,
         defaultValue: Article.rawAttributes.category.defaultValue,
+      });
+    }
+
+    if (!articles.prompt) {
+      await queryInterface.addColumn('articles', 'prompt', {
+        type: Article.rawAttributes.prompt.type,
+        allowNull: true,
       });
     }
 
@@ -174,12 +183,70 @@ async function ensureMaterialSchemaUpgrades() {
   }
 }
 
+async function ensureUserSchemaUpgrades() {
+  const sequelize = User.sequelize;
+  const queryInterface = sequelize.getQueryInterface();
+
+  try {
+    const users = await queryInterface.describeTable('users');
+    if (!users.role) {
+      await queryInterface.addColumn('users', 'role', {
+        type: User.rawAttributes.role.type,
+        defaultValue: 'user',
+      });
+    }
+    if (!users.status) {
+      await queryInterface.addColumn('users', 'status', {
+        type: User.rawAttributes.status.type,
+        defaultValue: 'active',
+      });
+    }
+  } catch (error) {
+    console.warn('[schema] user upgrade skipped:', error.message);
+  }
+}
+
+async function ensureAuditLogSchemaUpgrades() {
+  const sequelize = User.sequelize;
+  const queryInterface = sequelize.getQueryInterface();
+
+  try {
+    const logs = await queryInterface.describeTable('audit_logs');
+    if (!logs.reviewer_id) {
+      await queryInterface.addColumn('audit_logs', 'reviewer_id', {
+        type: AuditLog.rawAttributes.reviewer_id.type,
+        allowNull: true,
+      });
+    }
+    if (!logs.action) {
+      await queryInterface.addColumn('audit_logs', 'action', {
+        type: AuditLog.rawAttributes.action.type,
+        allowNull: true,
+      });
+    }
+    if (!logs.detail) {
+      await queryInterface.addColumn('audit_logs', 'detail', {
+        type: AuditLog.rawAttributes.detail.type,
+        allowNull: true,
+      });
+    }
+  } catch (error) {
+    console.warn('[schema] audit log upgrade skipped:', error.message);
+  }
+}
+
 async function ensureAuditReportSchemaUpgrades() {
   const sequelize = User.sequelize;
   const queryInterface = sequelize.getQueryInterface();
 
   try {
     const reports = await queryInterface.describeTable('audit_evaluation_reports');
+    if (!reports.user_id) {
+      await queryInterface.addColumn('audit_evaluation_reports', 'user_id', {
+        type: AuditEvaluationReport.rawAttributes.user_id.type,
+        allowNull: true,
+      });
+    }
     const jsonColumns = ['per_category_metrics', 'per_risk_level_metrics', 'confusion_matrix'];
     for (const column of jsonColumns) {
       if (!reports[column]) {
@@ -194,12 +261,27 @@ async function ensureAuditReportSchemaUpgrades() {
   }
 }
 
+async function ensureAuditAnnotationSchemaUpgrades() {
+  const sequelize = User.sequelize;
+  try {
+    // Expand risk_category ENUM to include all risk types
+    await sequelize.query(
+      "ALTER TABLE `audit_manual_annotations` MODIFY `risk_category` ENUM('NONE', 'PORN', 'GAMBLING', 'DRUG', 'POLITICAL', 'VIOLENCE_TERROR', 'PRIVACY', 'MINOR_RISK', 'FAKE_MARKETING', 'OTHER') NOT NULL DEFAULT 'NONE'",
+    );
+  } catch (error) {
+    console.warn('[schema] audit annotation upgrade skipped:', error.message);
+  }
+}
+
 async function syncModels() {
   await User.sequelize.sync();
+  await ensureUserSchemaUpgrades();
   await ensureArticleSchemaUpgrades();
+  await ensureAuditLogSchemaUpgrades();
   await ensurePromptTemplateSchemaUpgrades();
   await ensureMaterialSchemaUpgrades();
   await ensureAuditReportSchemaUpgrades();
+  await ensureAuditAnnotationSchemaUpgrades();
 
   const admin = await User.findOne({ where: { username: 'admin' } });
   if (!admin) {
@@ -207,7 +289,12 @@ async function syncModels() {
       username: 'admin',
       password_hash: await bcrypt.hash('admin123', 10),
       email: 'admin@example.com',
+      role: 'admin',
+      status: 'active',
     });
+  } else if (admin.role !== 'admin') {
+    // Upgrade existing admin user to have admin role
+    await admin.update({ role: 'admin', status: 'active' });
   }
 
   const defaultPrompts = [

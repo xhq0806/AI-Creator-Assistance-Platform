@@ -55,6 +55,7 @@ async function upsertDraft(req, res, next) {
       category = "通用",
       status = "draft",
       auto_fix = false,
+      prompt = "",
     } = req.body;
     let finalStatus = status;
     let auditResult;
@@ -118,6 +119,7 @@ async function upsertDraft(req, res, next) {
       ai_rank_score: aiRankScore,
       ai_rank_reason: aiRankReason,
       ai_rank_tags: aiRankTags,
+      prompt,
     };
 
     const savedArticle = article

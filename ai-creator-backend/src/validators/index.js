@@ -104,6 +104,7 @@ const schemas = {
     category: Joi.string().trim().max(32).default('通用'),
     status: Joi.string().valid('draft', 'pending_review', 'published', 'rejected', 'withdrawn').default('draft'),
     auto_fix: Joi.boolean().default(false),
+    prompt: Joi.string().trim().max(5000).allow('').optional(),
   }),
 
   syncDrafts: Joi.object({
@@ -162,6 +163,85 @@ const schemas = {
   cursorQuery: Joi.object({
     cursor: Joi.string().max(50),
     limit: Joi.number().integer().min(1).max(100).default(10),
+  }),
+
+  // ── Admin validators ─────────────────────────────────────
+  adminListUsers: Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    pageSize: Joi.number().integer().min(1).max(100).default(20),
+    search: Joi.string().trim().max(100).allow(''),
+    role: Joi.string().valid('user', 'editor', 'admin'),
+    status: Joi.string().valid('active', 'disabled'),
+  }),
+
+  adminUpdateUser: Joi.object({
+    role: Joi.string().valid('user', 'editor', 'admin'),
+    status: Joi.string().valid('active', 'disabled'),
+    phone: Joi.string().pattern(/^1\d{10}$/).allow(null),
+    email: Joi.string().email().allow(null),
+  }).min(1),
+
+  adminReviewArticle: Joi.object({
+    action: Joi.string().valid('approve', 'reject').required(),
+    reason: Joi.string().max(500).allow('', null),
+  }),
+
+  adminListArticles: Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    pageSize: Joi.number().integer().min(1).max(100).default(20),
+    status: Joi.string().valid('draft', 'pending_review', 'published', 'rejected', 'withdrawn'),
+    category: Joi.string().trim().max(32),
+    userId: Joi.number().integer().positive(),
+    dateFrom: Joi.date().iso(),
+    dateTo: Joi.date().iso(),
+  }),
+
+  adminUpdateRankingWeights: Joi.object({
+    qualityScore: Joi.number().min(0).max(2),
+    aiRankScore: Joi.number().min(0).max(2),
+    viewLog: Joi.number().min(0).max(2),
+    feedbackLog: Joi.number().min(0).max(2),
+    negative: Joi.number().min(0).max(2),
+    age: Joi.number().min(0).max(2),
+  }).min(1),
+
+  adminUpdateAIConfig: Joi.object({
+    provider: Joi.string().valid('ark', 'modelscope'),
+    apiKey: Joi.string().max(255).allow(''),
+    baseURL: Joi.string().uri().max(500).allow(''),
+    textModel: Joi.string().max(100),
+    imageModel: Joi.string().max(100).allow(''),
+    videoModel: Joi.string().max(100).allow(''),
+  }).min(1),
+
+  adminUpdateRateLimit: Joi.object({
+    globalWindowMs: Joi.number().integer().min(1000).max(3600000),
+    globalMax: Joi.number().integer().min(1).max(10000),
+    aiGenerate: Joi.number().integer().min(1).max(1000),
+    aiGenerateImage: Joi.number().integer().min(1).max(1000),
+    aiGenerateVideo: Joi.number().integer().min(1).max(1000),
+    aiAudit: Joi.number().integer().min(1).max(1000),
+    aiQuality: Joi.number().integer().min(1).max(1000),
+  }).min(1),
+
+  adminListMaterials: Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    pageSize: Joi.number().integer().min(1).max(100).default(20),
+    userId: Joi.number().integer().positive(),
+    riskStatus: Joi.string().valid('approved', 'rejected'),
+  }),
+
+  adminOverrideMaterialRisk: Joi.object({
+    riskStatus: Joi.string().valid('approved', 'rejected').required(),
+    reason: Joi.string().max(500).allow('', null),
+  }),
+
+  adminUpdateAuditCategories: Joi.object({
+    categories: Joi.array().items(Joi.object({
+      key: Joi.string().required(),
+      enabled: Joi.boolean().required(),
+      label: Joi.string().max(50),
+    })).min(1).max(20),
   }),
 };
 

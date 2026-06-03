@@ -1,6 +1,6 @@
 const { AuditManualAnnotation, AuditEvaluationReport, AuditLog, Article, User } = require('../models');
 const { ok, fail } = require('../utils/apiResponse');
-const { sequelize } = require('../models');
+const sequelize = require('../config/database');
 
 const RISK_LEVELS = ['SAFE', 'RISK_LOW', 'RISK_MEDIUM', 'RISK_HIGH'];
 const RISK_CATEGORIES = ['NONE', 'PORN', 'GAMBLING', 'DRUG', 'POLITICAL', 'VIOLENCE_TERROR', 'PRIVACY', 'MINOR_RISK', 'FAKE_MARKETING', 'OTHER'];
@@ -201,6 +201,7 @@ async function generateEvaluationReport(req, res) {
     const f1 = (precision + recall) > 0 ? 2 * precision * recall / (precision + recall) : 0;
 
     const report = await AuditEvaluationReport.create({
+      user_id: req.user?.id || null,
       total_samples: total,
       accuracy_rate: accuracy,
       precision_rate: precision,
@@ -219,7 +220,7 @@ async function generateEvaluationReport(req, res) {
 async function listEvaluationReports(req, res) {
   try {
     const reports = await AuditEvaluationReport.findAll({
-      order: [['report_generated_at', 'DESC']],
+      order: [['created_at', 'DESC']],
       limit: 20,
     });
     return ok(res, reports);

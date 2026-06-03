@@ -1,0 +1,160 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main]
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  # ── 类型检查 ──────────────────────────────────────────────
+  typecheck:
+    name: TypeScript 类型检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+
+  # ── 代码规范检查 ──────────────────────────────────────────
+  lint:
+    name: ESLint + 格式检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+        continue-on-error: true  # 初期宽松模式，逐步收紧
+      - run: pnpm run format:check
+        continue-on-error: true
+
+  # ── 前端测试 ──────────────────────────────────────────────
+  frontend-test:
+    name: 前端测试 (Jest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:frontend --coverage
+      - name: 上传覆盖率报告
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage
+          path: coverage/
+
+  # ── 后端测试 ──────────────────────────────────────────────
+  backend-test:
+    name: 后端测试 (Node)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root123
+          MYSQL_DATABASE: ai_creator
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir ai-creator-backend install --frozen-lockfile
+      - name: Run backend syntax check + tests
+        run: |
+          pnpm --dir ai-creator-backend run check
+          pnpm --dir ai-creator-backend run test
+        env:
+          NODE_ENV: test
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_DATABASE: ai_creator
+          MYSQL_USER: root
+          MYSQL_PASSWORD: root123
+          REDIS_URL: redis://127.0.0.1:6379
+
+  # ── 构建验证 ──────────────────────────────────────────────
+  build:
+    name: 前端构建
+    runs-on: ubuntu-latest
+    needs: [typecheck, frontend-test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # ── 部署（手动触发）───────────────────────────────────────
+  deploy:
+    name: 部署到生产
+    runs-on: ubuntu-latest
+    needs: [build, backend-test]
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: 部署 (请在此配置你的部署目标)
+        run: |
+          echo "部署步骤待配置。"
+          echo "前端 dist/ 可用于部署到 Nginx/CDN/对象存储。"
+          echo "后端通过 Docker Compose 或 PM2 部署。"

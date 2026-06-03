@@ -1,0 +1,93 @@
+.adminLayout {
+  // 减去全局 Header 高度 (64px)，避免页面出现滚动条
+  height: calc(100vh - 64px);
+}
+
+.sider {
+  overflow: auto;
+  height: 100%;
+  background: #001529;
+
+  :global(.ant-layout-sider-children) {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+.logo {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.siderFooter {
+  margin-top: auto;
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.backBtn {
+  color: rgba(255, 255, 255, 0.65) !important;
+  width: 100%;
+  justify-content: flex-start;
+
+  &:hover {
+    color: #fff !important;
+  }
+}
+
+.header {
+  padding: 0 24px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  height: 64px;
+}
+
+.trigger {
+  font-size: 18px;
+  width: 40px;
+  height: 40px;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.2s;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+}
+
+.username {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content {
+  padding: 24px;
+  background: #f5f5f5;
+  overflow-y: auto;
+}

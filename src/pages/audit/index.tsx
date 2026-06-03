@@ -31,6 +31,13 @@ import type {
 } from "@/services/api";
 import styles from "../profile/index.less";
 
+function formatDateTime(v: string | undefined) {
+  if (!v) return "-";
+  const d = new Date(v);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const riskColors: Record<string, string> = {
   SAFE: "green",
   RISK_LOW: "orange",
@@ -140,6 +147,7 @@ function AnnotationsTab() {
       dataIndex: "annotated_at",
       key: "annotated_at",
       width: 160,
+      render: formatDateTime,
     },
     {
       title: "操作",
@@ -484,9 +492,10 @@ function ReportsTab() {
     },
     {
       title: "生成时间",
-      dataIndex: "report_generated_at",
-      key: "report_generated_at",
+      dataIndex: "created_at",
+      key: "created_at",
       width: 160,
+      render: formatDateTime,
     },
     {
       title: "操作",

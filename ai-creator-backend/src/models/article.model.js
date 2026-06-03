@@ -80,6 +80,11 @@ const Article = sequelize.define(
       defaultValue: "通用",
       index: true,
     },
+    prompt: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: "创作提示词",
+    },
   },
   {
     tableName: "articles",

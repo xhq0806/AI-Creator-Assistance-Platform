@@ -14,7 +14,8 @@ export default function Layout() {
   const isLoginPage = location.pathname === "/login";
   const isCreatorPage = location.pathname.startsWith("/creator");
   const isWorkspacePage = location.pathname.startsWith("/workspace");
-  const isFullBleedPage = isLoginPage;
+  const isAdminPage = location.pathname.startsWith("/admin");
+  const isFullBleedPage = isLoginPage || isAdminPage;
   const shellClassName = [
     styles.shell,
     isIndexPage ? styles.indexShell : "",
@@ -31,6 +32,9 @@ export default function Layout() {
     { key: "likes", label: "我的点赞" },
     { key: "favorites", label: "我的收藏" },
     { key: "works", label: "个人作品" },
+    ...(currentUser && ['admin', 'editor'].includes(currentUser.role)
+      ? [{ type: "divider" as const }, { key: "/admin", label: "🔧 管理后台" }]
+      : []),
     { type: "divider" },
     { key: "/audit", label: "审核管理" },
     { type: "divider" },

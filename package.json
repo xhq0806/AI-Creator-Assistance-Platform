@@ -6,6 +6,14 @@
     "build": "umi build",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run typecheck && pnpm --dir ai-creator-backend run check && pnpm --dir ai-creator-backend run test",
+    "test:frontend": "jest --config jest.config.ts --passWithNoTests",
+    "test:frontend:watch": "jest --config jest.config.ts --watch",
+    "test:frontend:coverage": "jest --config jest.config.ts --coverage",
+    "test:all": "pnpm run typecheck && pnpm run test:frontend --coverage && pnpm --dir ai-creator-backend run check && pnpm --dir ai-creator-backend run test",
+    "lint": "eslint src/ --ext .ts,.tsx --max-warnings 0",
+    "lint:fix": "eslint src/ --ext .ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,less,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,less,css}\"",
     "smoke:e2e": "node scripts/smoke-e2e.js",
     "postinstall": "umi setup",
     "setup": "umi setup",
@@ -21,8 +29,21 @@
     "umi": "^4.6.55"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^29.5.14",
     "@types/react": "^18.0.33",
     "@types/react-dom": "^18.0.11",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint-plugin-react": "^7.34.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "prettier": "^3.2.0",
+    "ts-jest": "^29.2.0",
     "typescript": "^5.0.3"
   }
 }
