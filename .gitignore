@@ -1,17 +1,34 @@
 node_modules/
+
+# Env files
+.env
+.env.*
+!.env.example
 /.env.local
+ai-creator-backend/.env
+ai-creator-backend/.env.*
+!ai-creator-backend/.env.example
+
+# Local config
 /.umirc.local.ts
 /config/config.local.ts
+
+# Umi
 /src/.umi
 /src/.umi-production
 /src/.umi-test
 /dist
+
+# Build/cache
 .swc
 .turbopack
+.cache/
+node_modules/.cache/
 
-# Debug logs
+# Logs
+*.log
 debug.log
-
-# Environment files
-# ai-creator-backend/.env
-# ai-creator-backend/.env.example
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
