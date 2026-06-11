@@ -48,15 +48,23 @@ export async function requestJson<T>(
       });
       const refreshPayload = await refreshRes.json();
       if (refreshRes.ok && refreshPayload.code === 200) {
-        const refreshed = refreshPayload.data as CurrentUser;
-        window.localStorage.setItem("ai_creator_user", JSON.stringify(refreshed));
+        const refreshed = refreshPayload.data as Partial<CurrentUser>;
+        const mergedUser = {
+          ...user,
+          ...refreshed,
+          role: refreshed.role ?? user.role,
+          status: refreshed.status ?? user.status,
+          token: refreshed.token ?? user.token,
+          refreshToken: refreshed.refreshToken ?? user.refreshToken,
+        } as CurrentUser;
+        window.localStorage.setItem("ai_creator_user", JSON.stringify(mergedUser));
         const retryRes = await fetch(
           `${url}${searchParams.size ? `?${searchParams.toString()}` : ""}`,
           {
             ...options,
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${refreshed.token}`,
+              Authorization: `Bearer ${mergedUser.token}`,
               ...options.headers,
             },
             body: options.data ? JSON.stringify(options.data) : options.body,

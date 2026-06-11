@@ -15,7 +15,7 @@ import {
   message,
 } from "antd";
 import type { TabsProps } from "antd";
-import { history, useModel } from "umi";
+import { Navigate, useLocation } from "umi";
 import {
   createAuditAnnotation,
   deleteAuditAnnotation,
@@ -540,12 +540,33 @@ function ReportsTab() {
   );
 }
 
-export default function AuditPage() {
-  const { currentUser } = useModel("auth");
-
-  if (!currentUser) {
-    history.push("/login");
+function getStoredAuditUser() {
+  try {
+    const raw = window.localStorage.getItem('ai_creator_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    window.localStorage.removeItem('ai_creator_user');
     return null;
+  }
+}
+
+export default function AuditPage() {
+  const location = useLocation();
+  const storedUser = getStoredAuditUser();
+  const redirect = encodeURIComponent(`${location.pathname}${location.search}`);
+
+  useEffect(() => {
+    if (storedUser?.token && !['admin', 'editor'].includes(storedUser.role)) {
+      message.warning('您没有访问审核管理的权限');
+    }
+  }, [storedUser?.role, storedUser?.token]);
+
+  if (!storedUser?.token) {
+    return <Navigate to={`/login?redirect=${redirect}`} replace />;
+  }
+
+  if (!['admin', 'editor'].includes(storedUser.role)) {
+    return <Navigate to="/index" replace />;
   }
 
   const items: TabsProps["items"] = [

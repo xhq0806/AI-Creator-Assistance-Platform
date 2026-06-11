@@ -1,4 +1,4 @@
-import { useEffect, useCallback, type RefObject } from "react";
+import { useEffect, useCallback, useRef, type RefObject } from "react";
 import type { FormInstance } from "antd";
 import { message } from "antd";
 import {
@@ -22,6 +22,7 @@ type UseAutoSaveOptions = {
   localDraftId: RefObject<string>;
   publishingRef: RefObject<boolean>;
   form: FormInstance;
+  setArticleId: (id: number | undefined) => void;
 };
 
 export function useAutoSave({
@@ -33,11 +34,17 @@ export function useAutoSave({
   localDraftId,
   publishingRef,
   form,
+  setArticleId,
 }: UseAutoSaveOptions) {
+  // Ref to track the latest articleId for the auto-save timer
+  // so it can update after first auto-save creates a draft
+  const articleIdRef = useRef(articleId);
+  articleIdRef.current = articleId;
+
   const doSave = useCallback(
     async (showToast = true): Promise<number | undefined> => {
       if (!currentUserId || publishingRef.current) {
-        return articleId;
+        return articleIdRef.current;
       }
 
       const values = form.getFieldsValue();
@@ -52,7 +59,7 @@ export function useAutoSave({
       }
 
       const draft: ArticleDraft = {
-        id: articleId,
+        id: articleIdRef.current,
         title: rawTitle || "未命名草稿",
         content: values.content || "",
         media_urls: mediaUrls,
@@ -78,7 +85,7 @@ export function useAutoSave({
       try {
         const saved = await saveDraft(draft);
         if (showToast) {
-          message.success('草稿保存成功');
+          message.success("草稿保存成功");
         }
         return saved.id;
       } catch {
@@ -90,21 +97,35 @@ export function useAutoSave({
           dirty: true,
         } as OfflineDraft);
         if (showToast) {
-          message.warning('保存失败，已保存到本地，网络恢复后可手动同步');
+          message.warning("保存失败，已保存到本地，网络恢复后可手动同步");
         }
         return undefined;
       }
     },
-    [online, articleId, currentUserId, mediaUrls, articleCategory, form, localDraftId, publishingRef]
+    [online, currentUserId, mediaUrls, articleCategory, form, localDraftId, publishingRef]
   );
 
-  // Periodic auto-save
+  // Manual save: save then reset articleId so next save creates a NEW draft
+  const saveAndReset = useCallback(async (): Promise<void> => {
+    const id = await doSave(true);
+    if (id) {
+      setArticleId(undefined);
+    }
+  }, [doSave, setArticleId]);
+
+  // Periodic auto-save: continues editing the same draft
   useEffect(() => {
     const timer = window.setInterval(() => {
-      void doSave(false);
+      void doSave(false).then((id) => {
+        // If auto-save created the first draft, remember its id
+        // so subsequent auto-saves UPDATE instead of creating duplicates
+        if (id && !articleIdRef.current) {
+          setArticleId(id);
+        }
+      });
     }, AUTOSAVE_INTERVAL);
     return () => window.clearInterval(timer);
-  }, [doSave]);
+  }, [doSave, setArticleId]);
 
-  return { saveDraft: doSave };
+  return { saveDraft: doSave, saveAndReset };
 }

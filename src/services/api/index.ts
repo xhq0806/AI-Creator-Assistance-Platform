@@ -8,12 +8,13 @@ export type { ApiResponse } from "./types";
 export type {
   ArticleDraft, AuditResult, HotArticle, PromptTemplate, MaterialItem,
   ArticleVersion, GenerationRecord, PromptTeam, PromptTemplateVersion,
-  UploadCredential, AuditManualAnnotationItem, OfflineDraftSyncResult,
+  UploadCredential, AuditManualAnnotationItem, AuditEvaluationReportItem,
+  OfflineDraftSyncResult,
 } from "./types";
 
 export { login, register, refreshAuthToken } from "./auth";
 export {
-  generateContent, generateImage, generateVideo,
+  generateContent, generateImage, refineImage, generateVideo,
   auditContent, evaluateQuality,
   fetchGenerationHistory, deleteGenerationHistory,
 } from "./ai";

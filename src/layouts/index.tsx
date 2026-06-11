@@ -16,6 +16,7 @@ export default function Layout() {
   const isWorkspacePage = location.pathname.startsWith("/workspace");
   const isAdminPage = location.pathname.startsWith("/admin");
   const isFullBleedPage = isLoginPage || isAdminPage;
+  const authenticatedUser = currentUser?.token ? currentUser : undefined;
   const shellClassName = [
     styles.shell,
     isIndexPage ? styles.indexShell : "",
@@ -25,6 +26,9 @@ export default function Layout() {
   ]
     .filter(Boolean)
     .join(" ");
+  const canAccessStaffPages = Boolean(
+    authenticatedUser && ['admin', 'editor'].includes(authenticatedUser.role)
+  );
   const userMenuItems: MenuProps["items"] = [
     { key: "settings", label: "账号设置" },
     { key: "password", label: "修改密码" },
@@ -32,11 +36,13 @@ export default function Layout() {
     { key: "likes", label: "我的点赞" },
     { key: "favorites", label: "我的收藏" },
     { key: "works", label: "个人作品" },
-    ...(currentUser && ['admin', 'editor'].includes(currentUser.role)
-      ? [{ type: "divider" as const }, { key: "/admin", label: "🔧 管理后台" }]
+    ...(canAccessStaffPages
+      ? [
+          { type: "divider" as const },
+          { key: "/audit", label: "审核管理" },
+          { key: "/admin", label: "管理后台" },
+        ]
       : []),
-    { type: "divider" },
-    { key: "/audit", label: "审核管理" },
     { type: "divider" },
     { key: "switch", label: "切换账号" },
     { key: "logout", label: "退出登录", danger: true },
@@ -67,22 +73,26 @@ export default function Layout() {
           <Link to="/index" className={isIndexPage ? styles.activeNavLink : ""}>
             爆文发现
           </Link>
-          <Link
-            to="/creator"
-            className={isCreatorPage ? styles.activeNavLink : ""}
-          >
-            创作工作台
-          </Link>
-          <Link
-            to="/workspace"
-            className={
-              location.pathname.startsWith("/workspace")
-                ? styles.activeNavLink
-                : ""
-            }
-          >
-            资源工作台
-          </Link>
+          {authenticatedUser && (
+            <>
+              <Link
+                to="/creator"
+                className={isCreatorPage ? styles.activeNavLink : ""}
+              >
+                创作工作台
+              </Link>
+              <Link
+                to="/workspace"
+                className={
+                  location.pathname.startsWith("/workspace")
+                    ? styles.activeNavLink
+                    : ""
+                }
+              >
+                资源工作台
+              </Link>
+            </>
+          )}
         </nav>
         <Input.Search
           className={styles.searchBar}
@@ -95,14 +105,14 @@ export default function Layout() {
             }
           }}
         />
-        {currentUser ? (
+        {authenticatedUser ? (
           <Dropdown
             menu={{ items: userMenuItems, onClick: handleUserMenuClick }}
             placement="bottomRight"
             overlayClassName={styles.profileDropdown}
           >
             <Button className={styles.signOutButton} type="link">
-              个人中心 {currentUser.username} <DownOutlined />
+              个人中心 {authenticatedUser.username} <DownOutlined />
             </Button>
           </Dropdown>
         ) : (

@@ -9,12 +9,13 @@ export type { ApiResponse } from "./api/types";
 export type {
   ArticleDraft, AuditResult, HotArticle, PromptTemplate, MaterialItem,
   ArticleVersion, GenerationRecord, PromptTeam, PromptTemplateVersion,
-  UploadCredential, AuditManualAnnotationItem, OfflineDraftSyncResult,
+  UploadCredential, AuditManualAnnotationItem, AuditEvaluationReportItem,
+  OfflineDraftSyncResult,
 } from "./api/types";
 
 export { login, register, refreshAuthToken } from "./api/auth";
 export {
-  generateContent, generateImage, generateVideo,
+  generateContent, generateImage, refineImage, generateVideo,
   auditContent, evaluateQuality,
   fetchGenerationHistory, deleteGenerationHistory,
 } from "./api/ai";

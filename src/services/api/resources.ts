@@ -3,6 +3,7 @@ import { requestJson } from "./client";
 import type {
   PromptTemplate, PromptTemplateVersion, PromptTeam,
   MaterialItem, UploadCredential, AuditManualAnnotationItem,
+  AuditEvaluationReportItem,
 } from "./types";
 
 // ── Prompt 模板 ────────────────────────────────────────────
@@ -84,13 +85,13 @@ export async function seedAuditSamples(clearExisting?: boolean) {
   return (await requestJson<{ created: number }>("/api/v1/audit/seed-samples", { method: "POST", data: { clear_existing: !!clearExisting } })).data;
 }
 export async function generateAuditReport() {
-  return (await requestJson<any>("/api/v1/audit/evaluation/report", { method: "POST" })).data;
+  return (await requestJson<AuditEvaluationReportItem>("/api/v1/audit/evaluation/report", { method: "POST" })).data;
 }
 export async function fetchAuditReports() {
-  return (await requestJson<any[]>("/api/v1/audit/evaluation/reports", { method: "GET" })).data;
+  return (await requestJson<AuditEvaluationReportItem[]>("/api/v1/audit/evaluation/reports", { method: "GET" })).data;
 }
 export async function fetchAuditReportDetail(id: number) {
-  return (await requestJson<any>(`/api/v1/audit/evaluation/reports/${id}`, { method: "GET" })).data;
+  return (await requestJson<AuditEvaluationReportItem>(`/api/v1/audit/evaluation/reports/${id}`, { method: "GET" })).data;
 }
 
 // ── 用户资料 ───────────────────────────────────────────────

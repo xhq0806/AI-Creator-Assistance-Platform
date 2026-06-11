@@ -6,27 +6,66 @@ export async function generateContent(
   payload: { prompt: string; mode: "full_generation" | "rewrite" | "outline" | "structured"; materials?: string[] },
   signal?: AbortSignal
 ) {
-  const res = await requestJson<{ title: string; content: string; suggested_tags: string[] }>(
+  const res = await requestJson<{
+    title: string;
+    content: string;
+    suggested_tags: string[];
+    history_id?: number;
+  }>(
     "/api/v1/ai/generate", { method: "POST", data: payload, signal }
   );
   return res.data;
 }
 
 export async function generateImage(
-  payload: { prompt?: string; title?: string; content?: string; materials?: string[] },
+  payload: {
+    prompt?: string;
+    title?: string;
+    content?: string;
+    materials?: string[];
+    history_id?: number;
+  },
   signal?: AbortSignal
 ) {
-  const res = await requestJson<{ media_urls: string[]; cover_prompt: string; alt_text: string; provider?: string }>(
+  const res = await requestJson<{
+    media_urls: string[];
+    cover_prompt: string;
+    alt_text: string;
+    provider?: string;
+    history_id?: number;
+  }>(
     "/api/v1/ai/generate-image", { method: "POST", data: payload, signal }
   );
   return res.data;
 }
 
-export async function generateVideo(
-  payload: { prompt?: string; title?: string; content?: string; materials?: string[] },
+export async function refineImage(
+  payload: { image_url: string; instruction: string },
   signal?: AbortSignal
 ) {
-  const res = await requestJson<{ media_urls: string[]; video_prompt: string; alt_text: string; provider?: string }>(
+  const res = await requestJson<{ media_urls: string[]; cover_prompt: string; alt_text: string; provider?: string }>(
+    "/api/v1/ai/refine-image", { method: "POST", data: payload, signal }
+  );
+  return res.data;
+}
+
+export async function generateVideo(
+  payload: {
+    prompt?: string;
+    title?: string;
+    content?: string;
+    materials?: string[];
+    history_id?: number;
+  },
+  signal?: AbortSignal
+) {
+  const res = await requestJson<{
+    media_urls: string[];
+    video_prompt: string;
+    alt_text: string;
+    provider?: string;
+    history_id?: number;
+  }>(
     "/api/v1/ai/generate-video", { method: "POST", data: payload, signal }
   );
   return res.data;

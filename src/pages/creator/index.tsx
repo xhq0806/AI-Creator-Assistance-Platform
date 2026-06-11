@@ -65,6 +65,7 @@ import MaterialManager from "./components/MaterialManager";
 import AuditPanel from "./components/AuditPanel";
 import QualityPanel from "./components/QualityPanel";
 import PreviewModal from "./components/PreviewModal";
+import ImageRefineModal from "./components/ImageRefineModal";
 
 import styles from "./index.less";
 
@@ -117,6 +118,10 @@ export default function CreatorPage() {
   // ── Preview ─────────────────────────────────────────────
   const [previewOpen, setPreviewOpen] = useState(false);
 
+  // ── Image refine ─────────────────────────────────────────
+  const [refineImageUrl, setRefineImageUrl] = useState<string>("");
+  const [refineModalOpen, setRefineModalOpen] = useState(false);
+
   // ── Refs ────────────────────────────────────────────────
   const localDraftId = useRef(createLocalDraftId());
   const publishingRef = useRef(false);
@@ -125,14 +130,16 @@ export default function CreatorPage() {
   // ── Hooks ───────────────────────────────────────────────
   const { online } = useOfflineSync(currentUser?.id);
 
-  const { saveDraft: doSave } = useAutoSave({
+  const { saveDraft: doSave, saveAndReset } = useAutoSave({
     online, articleId, currentUserId: currentUser?.id,
     mediaUrls, articleCategory, localDraftId, publishingRef, form,
+    setArticleId,
   });
 
   const {
     generating, generatingImage, generatingVideo,
     generateMode, setGenerateMode,
+    setActiveHistoryId,
     handleGenerate, handleStopGenerate,
     handleGenerateImage, handleStopGenerateImage,
     handleGenerateVideo, handleStopGenerateVideo,
@@ -156,7 +163,6 @@ export default function CreatorPage() {
   // ── Auth guard ──────────────────────────────────────────
   useEffect(() => {
     if (!isLoggedIn) {
-      resetEditor();
       history.push("/login");
     }
   }, [isLoggedIn]);
@@ -175,6 +181,7 @@ export default function CreatorPage() {
     setQualityResult(undefined);
     setMediaUrls([]);
     setArticleCategory("");
+    setActiveHistoryId(undefined);
     localDraftId.current = createLocalDraftId();
   }
 
@@ -237,10 +244,9 @@ export default function CreatorPage() {
   }
 
   // ── Save / Publish ──────────────────────────────────────
-  async function handleSaveDraft(showToast = true) {
+  async function handleSaveDraft() {
     setSaving(true);
-    const id = await doSave(showToast);
-    if (id) setArticleId(id);
+    await saveAndReset();
     setSaving(false);
   }
 
@@ -528,7 +534,7 @@ export default function CreatorPage() {
           <Form<CreatorForm>
             form={form}
             layout="vertical"
-            onValuesChange={() => !online && void handleSaveDraft(false)}
+            onValuesChange={() => !online && void doSave(false)}
           >
             <Form.Item name="prompt" label="创作提示词">
               <Input.TextArea rows={3} placeholder="写一篇关于未来科技趋势的短图文" />
@@ -650,7 +656,9 @@ export default function CreatorPage() {
                               ...(item.prompt ? { prompt: item.prompt } : {}),
                             });
                           }
-                          if (media_urls?.length) setMediaUrls(media_urls);
+                          setMediaUrls(media_urls || []);
+                          setArticleId(undefined);
+                          setActiveHistoryId(Number(item.id));
                           message.success("已恢复该次生成结果");
                           setGenerationHistoryOpen(false);
                         }}
@@ -712,6 +720,10 @@ export default function CreatorPage() {
             mediaUrls={mediaUrls}
             setMediaUrls={setMediaUrls}
             onDeleteMaterial={handleDeleteMaterial}
+            onRefineImage={(url) => {
+              setRefineImageUrl(url);
+              setRefineModalOpen(true);
+            }}
           />
 
           {/* 审核面板 */}
@@ -732,6 +744,15 @@ export default function CreatorPage() {
 
       {/* 预览 Modal */}
       <PreviewModal open={previewOpen} onClose={() => setPreviewOpen(false)} form={form} mediaUrls={mediaUrls} />
+      <ImageRefineModal
+        open={refineModalOpen}
+        imageUrl={refineImageUrl}
+        onClose={() => setRefineModalOpen(false)}
+        onRefined={(newUrl) => {
+          setMediaUrls((current) => current.map((u) => (u === refineImageUrl ? newUrl : u)));
+          setRefineModalOpen(false);
+        }}
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 const { aiProvider, aiTimeoutMs, ark, modelscope } = require("../config/env");
+const { persistImageResult } = require("../utils/persistMedia");
 
 const IMAGE_STYLE_SUFFIX =
   "写实摄影风格，自然光线，画面无文字、无水印、无海报排版，适合作为文章配图。";
@@ -97,6 +98,46 @@ function normalizeProviderError(message) {
     return "输入内容不符合模型内容安全策略，无法继续生成。请修改为合规表达后再试。";
   }
   return text;
+}
+
+/**
+ * Download an image from a URL and return as base64 data URI.
+ * If the input is already a data URI, return it directly.
+ */
+async function fetchImageAsBase64(url) {
+  const value = String(url || "").trim();
+  if (!value) throw new Error("图片地址为空，无法下载");
+
+  // Already a base64 data URI — return as-is
+  if (value.startsWith("data:image/")) return value;
+
+  // Local file path — read from disk
+  if (!/^https?:\/\//i.test(value)) {
+    const fs = require("fs");
+    const path = require("path");
+    const mime = value.endsWith(".png") ? "image/png"
+      : value.endsWith(".gif") ? "image/gif"
+      : value.endsWith(".webp") ? "image/webp"
+      : "image/jpeg";
+    const buffer = fs.readFileSync(value);
+    return `data:${mime};base64,${buffer.toString("base64")}`;
+  }
+
+  // Remote URL — fetch and encode
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), aiTimeoutMs);
+  try {
+    const response = await fetch(value, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`下载图片失败 HTTP ${response.status}`);
+    }
+    const contentType = response.headers.get("content-type") || "image/png";
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    return `data:${contentType};base64,${base64}`;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function isLikelyImageUrl(url) {
@@ -822,7 +863,9 @@ async function generateImage({ prompt, title, content }) {
 
   if (ark.apiKey && ark.imageModel) {
     try {
-      return await generateImageWithArk(imagePrompt, { title });
+      return await persistImageResult(
+        await generateImageWithArk(imagePrompt, { title })
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(message);
@@ -832,7 +875,9 @@ async function generateImage({ prompt, title, content }) {
 
   if (modelscope.apiKey) {
     try {
-      return await generateImageWithModelScope(imagePrompt, { title });
+      return await persistImageResult(
+        await generateImageWithModelScope(imagePrompt, { title })
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(message);
@@ -841,14 +886,137 @@ async function generateImage({ prompt, title, content }) {
   }
 
   if (!ark.apiKey && !modelscope.apiKey) {
-    return createPlaceholderCover({
-      title,
-      prompt: imagePrompt,
-      reason: "missing_api_key",
-    });
+    return persistImageResult(
+      createPlaceholderCover({
+        title,
+        prompt: imagePrompt,
+        reason: "missing_api_key",
+      })
+    );
   }
 
   throw new Error(failures.join("；") || "配图生成失败，请检查文生图 API 配置");
+}
+
+/**
+ * Ark image-to-image refinement: sends the original image as a base64
+ * reference so Seedream edits the image instead of generating from scratch.
+ */
+async function refineImageWithArkImagesApi(instruction, imageBase64) {
+  const baseURL = String(ark.baseURL || "").replace(/\/$/, "");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), aiTimeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${baseURL}/images/generations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ark.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: ark.imageModel,
+        prompt: instruction,
+        image: imageBase64,           // reference image for image-to-image editing
+        size: "1280x720",
+        response_format: "url",
+        watermark: false,
+        sequential_image_generation: "disabled",
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail =
+      payload?.error?.message || payload?.message || `HTTP ${response.status}`;
+    throw new Error(normalizeArkImageError(`火山方舟图片微调失败：${detail}`));
+  }
+
+  const urls = (payload.data || []).map((item) => item?.url).filter(Boolean);
+
+  if (!urls.length) {
+    throw new Error("图片微调接口未返回新图片地址");
+  }
+
+  const reachable = await filterReachableImageUrls(urls);
+  if (!reachable.length) {
+    throw new Error("微调结果地址不可访问");
+  }
+
+  return {
+    media_urls: reachable,
+    cover_prompt: instruction,
+    alt_text: "AI 微调配图",
+    provider: "ark-seedream-refine",
+  };
+}
+
+/**
+ * Refine an existing image — download the original, pass it as a
+ * reference to the image API so only the requested edits are applied,
+ * preserving the original composition.
+ */
+async function refineImage({ image_url, instruction }) {
+  const localRisk = scanLocalRisk(instruction);
+  if (localRisk) {
+    throw new Error(buildLocalRiskResult(localRisk).reason);
+  }
+
+  // Download the original image once, reuse for all providers
+  let imageBase64;
+  try {
+    imageBase64 = await fetchImageAsBase64(image_url);
+  } catch (error) {
+    throw new Error(`无法获取原图：${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const failures = [];
+
+  if (ark.apiKey && ark.imageModel) {
+    try {
+      return await persistImageResult(
+        await refineImageWithArkImagesApi(instruction, imageBase64)
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(message);
+      console.error("[refineImage] Ark refine failed:", message);
+    }
+  }
+
+  if (modelscope.apiKey) {
+    try {
+      const fullPrompt = [
+        "根据以下修改要求调整图片，保持原始构图、色调和风格不变：",
+        `修改要求：${instruction}`,
+      ].join("\n");
+      // ModelScope may not support reference images — fall back to prompt-only
+      return await persistImageResult(
+        await generateImageWithModelScope(fullPrompt, { title: "图片微调" })
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(message);
+      console.error("[refineImage] ModelScope refine failed:", message);
+    }
+  }
+
+  if (!ark.apiKey && !modelscope.apiKey) {
+    return persistImageResult(
+      createPlaceholderCover({
+        title: "图片微调",
+        prompt: instruction,
+        reason: "missing_api_key",
+      })
+    );
+  }
+
+  throw new Error(failures.join("；") || "图片微调失败，请检查文生图 API 配置");
 }
 
 async function generateVideo({ prompt, title, content }) {
@@ -895,6 +1063,7 @@ async function generateVideo({ prompt, title, content }) {
 module.exports = {
   generateContent,
   generateImage,
+  refineImage,
   generateVideo,
   auditContent,
   evaluateQuality,

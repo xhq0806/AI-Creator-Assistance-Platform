@@ -1,22 +1,44 @@
-import React from 'react';
-import { Navigate } from 'umi';
+import { useEffect } from 'react';
+import { Navigate, Outlet, useLocation } from 'umi';
 import { message } from 'antd';
 
-export default function StaffWrapper({ children }: { children: React.ReactNode }) {
+const STAFF_DENIED_MESSAGE_KEY = 'staff-access-denied';
+
+function StaffDeniedRedirect() {
+  useEffect(() => {
+    message.open({
+      type: 'warning',
+      content: '您没有访问管理后台的权限',
+      key: STAFF_DENIED_MESSAGE_KEY,
+    });
+  }, []);
+
+  return <Navigate to="/index" replace />;
+}
+
+export default function StaffWrapper() {
+  const location = useLocation();
+  const redirect = encodeURIComponent(`${location.pathname}${location.search}`);
+
   try {
     const raw = window.localStorage.getItem('ai_creator_user');
     if (!raw) {
-      return <Navigate to="/login" replace />;
+      return <Navigate to={`/login?redirect=${redirect}`} replace />;
     }
 
     const user = JSON.parse(raw);
-    if (!['admin', 'editor'].includes(user.role)) {
-      message.warning('您没有访问管理后台的权限');
-      return <Navigate to="/index" replace />;
+    if (!user?.token) {
+      window.localStorage.removeItem('ai_creator_user');
+      return <Navigate to={`/login?redirect=${redirect}`} replace />;
     }
 
-    return <>{children}</>;
+    if (!['admin', 'editor'].includes(user.role)) {
+      return <StaffDeniedRedirect />;
+    }
+
+    return <Outlet />;
   } catch {
+    window.localStorage.removeItem('ai_creator_user');
     return <Navigate to="/login" replace />;
   }
 }

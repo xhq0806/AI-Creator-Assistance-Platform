@@ -6,7 +6,7 @@ const fs = require("fs");
 const rateLimit = require("express-rate-limit");
 const { port, isProduction } = require("./config/env");
 const { syncModels } = require("./models");
-const { requireAuth } = require("./middleware/auth");
+const { requireAuth, optionalAuth } = require("./middleware/auth");
 const { requireAdmin, requireStaff } = require("./middleware/adminAuth");
 const { aiRateLimiter } = require("./middleware/rateLimiter");
 const {
@@ -136,6 +136,13 @@ app.post(
   aiController.generateImage
 );
 app.post(
+  "/api/v1/ai/refine-image",
+  requireAuth,
+  aiRateLimiter(8),
+  validate("aiRefineImage"),
+  aiController.refineImage
+);
+app.post(
   "/api/v1/ai/generate-video",
   requireAuth,
   aiRateLimiter(4),
@@ -263,38 +270,45 @@ app.post(
 app.post(
   "/api/v1/audit/annotations",
   requireAuth,
+  requireStaff,
   validate("createAuditAnnotation"),
   auditAnnotationController.createAnnotation
 );
 app.get(
   "/api/v1/audit/annotations",
   requireAuth,
+  requireStaff,
   auditAnnotationController.listAnnotations
 );
 app.delete(
   "/api/v1/audit/annotations/:id",
   requireAuth,
+  requireStaff,
   validateParams("idParam"),
   auditAnnotationController.deleteAnnotation
 );
 app.post(
   "/api/v1/audit/seed-samples",
   requireAuth,
+  requireStaff,
   auditAnnotationController.seedSamples
 );
 app.post(
   "/api/v1/audit/evaluation/report",
   requireAuth,
+  requireStaff,
   auditAnnotationController.generateEvaluationReport
 );
 app.get(
   "/api/v1/audit/evaluation/reports",
   requireAuth,
+  requireStaff,
   auditAnnotationController.listEvaluationReports
 );
 app.get(
   "/api/v1/audit/evaluation/reports/:id",
   requireAuth,
+  requireStaff,
   validateParams("idParam"),
   auditAnnotationController.getReportDetail
 );
@@ -364,7 +378,7 @@ app.post(
   articleController.feedback
 );
 app.get("/api/v1/articles/search", articleController.searchArticles);
-app.get("/api/v1/articles/:id", articleController.detail);
+app.get("/api/v1/articles/:id", optionalAuth, articleController.detail);
 
 // ── 热榜路由 ────────────────────────────────────────────────
 app.get(

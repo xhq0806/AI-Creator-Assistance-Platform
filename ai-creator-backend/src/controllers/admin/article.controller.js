@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const { Article, User, AuditLog, ArticleVersion, UserFeedback } = require('../../models');
 const { ok } = require('../../utils/apiResponse');
 const { serializeArticle } = require('../article.controller');
+const { refreshArticleRank, removeArticleFromRank } = require('../../services/ranking.service');
 
 async function getArticleStats(req, res, next) {
   try {
@@ -97,6 +98,7 @@ async function reviewArticle(req, res, next) {
     const newStatus = action === 'approve' ? 'published' : 'rejected';
 
     await article.update({ status: newStatus });
+    await refreshArticleRank(article);
 
     // Log the review action
     await AuditLog.create({
@@ -124,6 +126,7 @@ async function forceWithdraw(req, res, next) {
     }
 
     await article.update({ status: 'withdrawn' });
+    await refreshArticleRank(article);
 
     await AuditLog.create({
       article_id: article.id,
@@ -145,13 +148,16 @@ async function forceDelete(req, res, next) {
       return res.status(404).json({ code: 404, message: '文章不存在' });
     }
 
+    const articleId = article.id;
+
     await Promise.all([
-      ArticleVersion.destroy({ where: { article_id: article.id } }),
-      UserFeedback.destroy({ where: { article_id: article.id } }),
-      AuditLog.destroy({ where: { article_id: article.id } }),
+      ArticleVersion.destroy({ where: { article_id: articleId } }),
+      UserFeedback.destroy({ where: { article_id: articleId } }),
+      AuditLog.destroy({ where: { article_id: articleId } }),
     ]);
 
     await article.destroy();
+    await removeArticleFromRank(articleId);
 
     return ok(res, { message: '文章已删除' });
   } catch (error) {

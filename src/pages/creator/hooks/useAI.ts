@@ -5,17 +5,7 @@ import {
   generateContent,
   generateImage,
   generateVideo,
-  type GenerationRecord,
-  type AuditResult,
 } from "@/services/api";
-
-type QualityResult = {
-  quality_score: number;
-  structure: number;
-  depth: number;
-  fluency: number;
-  reason: string;
-};
 
 type UseAIOptions = {
   form: FormInstance;
@@ -34,6 +24,11 @@ export function useAI({ form, mediaUrls, setMediaUrls }: UseAIOptions) {
   const abortRef = useRef<AbortController | null>(null);
   const imageAbortRef = useRef<AbortController | null>(null);
   const videoAbortRef = useRef<AbortController | null>(null);
+  const activeHistoryIdRef = useRef<number | undefined>();
+
+  const setActiveHistoryId = useCallback((id?: number) => {
+    activeHistoryIdRef.current = id;
+  }, []);
 
   const handleGenerate = useCallback(async () => {
     const prompt = form.getFieldValue("prompt");
@@ -51,6 +46,9 @@ export function useAI({ form, mediaUrls, setMediaUrls }: UseAIOptions) {
         controller.signal
       );
       form.setFieldsValue(generated);
+      if (generated.history_id) {
+        activeHistoryIdRef.current = generated.history_id;
+      }
       message.success("AI 内容已生成");
     } catch (error: any) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -75,15 +73,28 @@ export function useAI({ form, mediaUrls, setMediaUrls }: UseAIOptions) {
       message.warning("请先输入创作提示词、标题或正文");
       return;
     }
+    if (!activeHistoryIdRef.current) {
+      message.warning("请先点击「AI 生成」，再生成配图，以确保配图归入正确的生成历史");
+      return;
+    }
 
     const controller = new AbortController();
     imageAbortRef.current = controller;
     setGeneratingImage(true);
     try {
       const result = await generateImage(
-        { prompt: values.prompt, title: values.title, content: values.content, materials: mediaUrls },
+        {
+          prompt: values.prompt,
+          title: values.title,
+          content: values.content,
+          materials: mediaUrls,
+          history_id: activeHistoryIdRef.current,
+        },
         controller.signal
       );
+      if (result.history_id) {
+        activeHistoryIdRef.current = result.history_id;
+      }
       setMediaUrls(result.media_urls);
       if (result.provider === "placeholder") {
         message.warning("当前为占位图（未配置文生图 API）");
@@ -113,15 +124,28 @@ export function useAI({ form, mediaUrls, setMediaUrls }: UseAIOptions) {
       message.warning("请先输入创作提示词、标题或正文");
       return;
     }
+    if (!activeHistoryIdRef.current) {
+      message.warning("请先点击「AI 生成」，再生成视频，以确保素材归入正确的生成历史");
+      return;
+    }
 
     const controller = new AbortController();
     videoAbortRef.current = controller;
     setGeneratingVideo(true);
     try {
       const result = await generateVideo(
-        { prompt: values.prompt, title: values.title, content: values.content, materials: mediaUrls },
+        {
+          prompt: values.prompt,
+          title: values.title,
+          content: values.content,
+          materials: mediaUrls,
+          history_id: activeHistoryIdRef.current,
+        },
         controller.signal
       );
+      if (result.history_id) {
+        activeHistoryIdRef.current = result.history_id;
+      }
       setMediaUrls((current) => Array.from(new Set([...result.media_urls, ...current])));
       message.success("AI 视频已生成并加入素材列表");
     } catch (error: any) {
@@ -142,6 +166,7 @@ export function useAI({ form, mediaUrls, setMediaUrls }: UseAIOptions) {
     generatingVideo,
     generateMode,
     setGenerateMode,
+    setActiveHistoryId,
     handleGenerate,
     handleStopGenerate: () => abortRef.current?.abort(),
     handleGenerateImage,

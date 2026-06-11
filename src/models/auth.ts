@@ -4,6 +4,8 @@ import { history } from 'umi';
 import type { CurrentUser } from '@/app';
 import { login, register } from '@/services/api';
 
+const DEFAULT_POST_AUTH_REDIRECT = '/creator?restore=latest';
+
 function readStoredUser() {
   const rawUser = window.localStorage.getItem('ai_creator_user');
   if (!rawUser) {
@@ -16,6 +18,21 @@ function readStoredUser() {
     window.localStorage.removeItem('ai_creator_user');
     return undefined;
   }
+}
+
+function getPostAuthRedirect() {
+  const redirect = new URLSearchParams(window.location.search).get('redirect');
+  if (!redirect) {
+    return DEFAULT_POST_AUTH_REDIRECT;
+  }
+
+  const isSafeRelativePath =
+    redirect.startsWith('/') &&
+    !redirect.startsWith('//') &&
+    !redirect.includes('://') &&
+    redirect.trim() === redirect;
+
+  return isSafeRelativePath ? redirect : DEFAULT_POST_AUTH_REDIRECT;
 }
 
 export default function useAuthModel() {
@@ -34,23 +51,23 @@ export default function useAuthModel() {
     });
   }, []);
 
-  const signIn = useCallback(async (account: string, password: string) => {
-    const user = await login({ account, password });
+  const completeAuth = useCallback((user: CurrentUser) => {
     window.localStorage.setItem('ai_creator_user', JSON.stringify(user));
     flushSync(() => {
       setCurrentUser(user);
     });
-    history.push('/creator?restore=latest');
+    history.push(getPostAuthRedirect());
   }, []);
+
+  const signIn = useCallback(async (account: string, password: string) => {
+    const user = await login({ account, password });
+    completeAuth(user);
+  }, [completeAuth]);
 
   const signUp = useCallback(async (payload: { username: string; password: string; phone?: string; email?: string }) => {
     const user = await register(payload);
-    window.localStorage.setItem('ai_creator_user', JSON.stringify(user));
-    flushSync(() => {
-      setCurrentUser(user);
-    });
-    history.push('/creator?restore=latest');
-  }, []);
+    completeAuth(user);
+  }, [completeAuth]);
 
   const signOut = useCallback(() => {
     window.localStorage.removeItem('ai_creator_user');

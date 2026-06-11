@@ -35,21 +35,30 @@
   top: 0;
   z-index: 10;
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 28px;
-  height: 64px;
-  padding: 0 40px;
+  gap: clamp(8px, 1.6vw, 28px);
+  height: clamp(52px, 4.2vw, 64px);
+  padding: 0 clamp(16px, 2.8vw, 40px);
+  overflow-x: auto;
+  overflow-y: hidden;
   background: rgba(8, 18, 35, 0.1);
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 8px 32px rgba(15, 23, 42, 0.062);
   backdrop-filter: blur(18px) saturate(140%);
+  scrollbar-width: none;
+}
+
+.header::-webkit-scrollbar {
+  display: none;
 }
 
 .header a,
 .header button {
   color: rgba(255, 255, 255, 0.86);
-  font-size: 24px;
+  font-size: clamp(13px, 0.55rem + 0.85vw, 24px);
   font-weight: 500;
+  white-space: nowrap;
   text-decoration: none;
   text-shadow: 0 1px 8px rgba(15, 23, 42, 0.28);
   transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;
@@ -62,29 +71,36 @@
 
 .brand {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 12px;
+  gap: clamp(6px, 0.8vw, 12px);
   color: #fff;
-  font-size: 24px;
+  font-size: clamp(14px, 0.6rem + 0.9vw, 24px);
   font-weight: 700;
   letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 
 .brandIcon {
-  height: 36px;
-  width: 36px;
+  height: clamp(28px, 2.4vw, 36px);
+  width: clamp(28px, 2.4vw, 36px);
+  flex-shrink: 0;
   object-fit: contain;
 }
 
 .nav {
   display: flex;
-  flex: 1;
-  gap: 10px;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: clamp(4px, 0.7vw, 10px);
+  min-width: 0;
 }
 
 .nav a {
-  padding: 6px 12px;
+  flex-shrink: 0;
+  padding: clamp(4px, 0.45vw, 6px) clamp(8px, 0.9vw, 12px);
   border-radius: 999px;
+  white-space: nowrap;
 }
 
 .nav a:hover {
@@ -103,10 +119,14 @@
 .signOutButton:hover,
 .signOutButton:focus {
   color: #fff;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .searchBar {
-  width: 220px;
+  flex-shrink: 1;
+  width: clamp(120px, 16vw, 220px);
+  min-width: 120px;
 }
 
 .profileDropdown :global(.ant-dropdown-menu) {
@@ -165,40 +185,6 @@
 }
 
 @media (max-width: 768px) {
-  .header {
-    padding: 0 16px;
-    gap: 12px;
-    height: 56px;
-  }
-
-  .header a,
-  .header button {
-    font-size: 14px;
-  }
-
-  .brand {
-    font-size: 18px;
-    gap: 6px;
-  }
-
-  .brandIcon {
-    height: 28px;
-    width: 28px;
-  }
-
-  .nav {
-    gap: 4px;
-  }
-
-  .nav a {
-    padding: 4px 8px;
-    font-size: 13px;
-  }
-
-  .searchBar {
-    width: 140px;
-  }
-
   .main {
     padding: 16px 0 40px;
   }

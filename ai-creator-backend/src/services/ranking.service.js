@@ -10,10 +10,17 @@ async function cacheArticle(article) {
   await redis.set(`article:${payload.id}`, JSON.stringify(payload), "EX", 600);
 }
 
+async function removeArticleFromRank(articleId) {
+  const id = String(articleId);
+  await Promise.all([
+    redis.zrem(HOT_RANK_KEY, id),
+    redis.del(`article:${id}`),
+  ]);
+}
+
 async function refreshArticleRank(article) {
   if (article.status !== "published") {
-    await redis.zrem(HOT_RANK_KEY, String(article.id));
-    await cacheArticle(article);
+    await removeArticleFromRank(article.id);
     return 0;
   }
 
@@ -161,62 +168,55 @@ async function getHotArticles({
     return { list, nextCursor: undefined };
   }
 
-  const cacheKeys = pairs.map((item) => `article:${item.id}`);
-  const cachedRows = await redis.mget(cacheKeys);
-  const missingIds = pairs
-    .filter((_, index) => !cachedRows[index])
-    .map((item) => item.id);
-  let missingArticles = [];
+  const pairIds = pairs.map((item) => item.id);
+  let liveArticles = [];
   try {
-    missingArticles = missingIds.length
+    liveArticles = pairIds.length
       ? await Article.findAll({
-          where: { id: missingIds, status: "published" },
+          where: { id: pairIds, status: "published" },
           include: [{ model: User, attributes: ["id", "username"] }],
         })
       : [];
   } catch {
-    // 降级查询
-    missingArticles = missingIds.length
+    liveArticles = pairIds.length
       ? await Article.findAll({
-          where: { id: missingIds, status: "published" },
+          where: { id: pairIds, status: "published" },
           include: [{ model: User, attributes: ["id", "username"] }],
         })
       : [];
   }
-  const missingMap = new Map(
-    missingArticles.map((article) => [String(article.id), article.toJSON()])
+
+  const liveMap = new Map(
+    liveArticles.map((article) => [String(article.id), article])
   );
+  const staleIds = pairIds.filter((id) => !liveMap.has(String(id)));
+  if (staleIds.length) {
+    void Promise.all(staleIds.map((id) => removeArticleFromRank(id))).catch(() => {});
+  }
 
   const list = pairs
-    .map((pair, index) => {
-      let articleData;
-      try {
-        articleData = cachedRows[index]
-          ? JSON.parse(cachedRows[index])
-          : missingMap.get(String(pair.id));
-      } catch {
-        articleData = missingMap.get(String(pair.id));
-      }
-
-      if (!articleData || articleData.status !== "published") {
+    .map((pair) => {
+      const article = liveMap.get(String(pair.id));
+      if (!article) {
         return undefined;
       }
 
-      const mediaUrls = articleData.media_urls || [];
+      const payload = article.toJSON();
+      const mediaUrls = payload.media_urls || [];
       return {
-        ...articleData,
-        id: Number(articleData.id),
-        user_id: Number(articleData.user_id),
-        quality_score: Number(articleData.quality_score || 0),
-        ai_rank_score: Number(articleData.ai_rank_score || 0),
-        ai_rank_reason: articleData.ai_rank_reason || "",
-        ai_rank_tags: articleData.ai_rank_tags || [],
+        ...payload,
+        id: Number(payload.id),
+        user_id: Number(payload.user_id),
+        quality_score: Number(payload.quality_score || 0),
+        ai_rank_score: Number(payload.ai_rank_score || 0),
+        ai_rank_reason: payload.ai_rank_reason || "",
+        ai_rank_tags: payload.ai_rank_tags || [],
         cover_url: Array.isArray(mediaUrls) ? mediaUrls[0] : undefined,
-        author: articleData.User
-          ? { id: Number(articleData.User.id), username: articleData.User.username }
+        author: payload.User
+          ? { id: Number(payload.User.id), username: payload.User.username }
           : undefined,
         score: pair.score,
-        category: articleData.category || "通用",
+        category: payload.category || "通用",
       };
     })
     .filter(Boolean);
@@ -233,6 +233,7 @@ async function getHotArticles({
 module.exports = {
   HOT_RANK_KEY,
   calculateHotScore,
+  removeArticleFromRank,
   refreshArticleRank,
   getHotArticles,
 };

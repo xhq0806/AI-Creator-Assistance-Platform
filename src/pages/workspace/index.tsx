@@ -482,12 +482,13 @@ function MaterialsTab() {
 }
 
 export default function WorkspacePage() {
-  const { currentUser } = useModel("auth");
+  const { isLoggedIn } = useModel("auth");
 
-  if (!currentUser) {
-    history.push("/login");
-    return null;
-  }
+  useEffect(() => {
+    if (!isLoggedIn) {
+      history.push("/login");
+    }
+  }, [isLoggedIn]);
 
   const items: TabsProps["items"] = [
     { key: "prompts", label: "Prompt 模板管理", children: <PromptsTab /> },

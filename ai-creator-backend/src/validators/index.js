@@ -28,6 +28,7 @@ const schemas = {
     title: Joi.string().trim().max(255).allow('', null),
     content: Joi.string().trim().max(10000).allow('', null),
     materials: Joi.array().items(Joi.string().uri().max(600)).max(20).default([]),
+    history_id: Joi.number().integer().positive().optional(),
   }),
 
   aiGenerateVideo: Joi.object({
@@ -35,12 +36,18 @@ const schemas = {
     title: Joi.string().trim().max(255).allow('', null),
     content: Joi.string().trim().max(10000).allow('', null),
     materials: Joi.array().items(Joi.string().uri().max(600)).max(20).default([]),
+    history_id: Joi.number().integer().positive().optional(),
   }),
 
   aiAudit: Joi.object({
     prompt: Joi.string().trim().max(4000).allow('', null),
     title: Joi.string().trim().max(255).allow('', null),
     content: Joi.string().trim().max(50000).allow('', null),
+  }),
+
+  aiRefineImage: Joi.object({
+    image_url: Joi.string().uri().max(600).required(),
+    instruction: Joi.string().trim().min(1).max(2000).required(),
   }),
 
   aiQuality: Joi.object({

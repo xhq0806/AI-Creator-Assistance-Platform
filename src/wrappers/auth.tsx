@@ -1,7 +1,6 @@
-import React from 'react';
-import { Navigate, useLocation } from 'umi';
+import { Navigate, Outlet, useLocation } from 'umi';
 
-export default function AuthWrapper({ children }: { children: React.ReactNode }) {
+export default function AuthWrapper() {
   const location = useLocation();
 
   try {
@@ -16,7 +15,7 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
       return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
     }
 
-    return <>{children}</>;
+    return <Outlet />;
   } catch {
     window.localStorage.removeItem('ai_creator_user');
     return <Navigate to="/login" replace />;

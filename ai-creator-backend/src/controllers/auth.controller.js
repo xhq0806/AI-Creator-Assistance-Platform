@@ -82,6 +82,8 @@ async function register(req, res, next) {
       phone: phone || null,
       email: email || null,
       password_hash: await bcrypt.hash(password, 10),
+      role: 'user',
+      status: 'active',
     });
 
     return ok(res, signTokens(user));
@@ -97,19 +99,36 @@ async function refresh(req, res, next) {
       return res.status(400).json({ code: 400, message: "缺少 refresh token" });
     }
 
-    const decoded = jwt.verify(refreshToken, jwtRefreshSecret);
-    const user = await User.findByPk(decoded.id, {
-      attributes: ["id", "username", "phone", "email"],
-    });
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, jwtRefreshSecret);
+    } catch {
+      return res
+        .status(401)
+        .json({ code: 401, message: "refresh token 已失效，请重新登录" });
+    }
+
+    let user;
+    try {
+      user = await User.findByPk(decoded.id, {
+        attributes: ["id", "username", "phone", "email", "role", "status"],
+      });
+    } catch {
+      return res
+        .status(503)
+        .json({ code: 503, message: '认证服务暂不可用，请稍后重试' });
+    }
+
     if (!user) {
       return res.status(401).json({ code: 401, message: "用户不存在" });
     }
+    if (user.status === 'disabled') {
+      return res.status(403).json({ code: 403, message: '账号已被禁用，请联系管理员' });
+    }
 
     return ok(res, signTokens(user));
-  } catch {
-    return res
-      .status(401)
-      .json({ code: 401, message: "refresh token 已失效，请重新登录" });
+  } catch (error) {
+    return next(error);
   }
 }
 

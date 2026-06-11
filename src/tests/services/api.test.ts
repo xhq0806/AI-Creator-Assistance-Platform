@@ -151,5 +151,52 @@ describe("API Service (api.ts)", () => {
       const refreshCall = mockFetch.mock.calls[1];
       expect(refreshCall[0]).toContain("/auth/refresh");
     });
+
+    it("preserves frontend fields while trusting refreshed auth fields", async () => {
+      localStorage.setItem(
+        "ai_creator_user",
+        JSON.stringify({
+          id: 1,
+          username: "test",
+          role: "admin",
+          status: "disabled",
+          token: "expired",
+          refreshToken: "old-rt",
+          workspaceDraftId: "draft-1",
+        })
+      );
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ code: 401, message: "Expired" }),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 200,
+          data: {
+            role: "editor",
+            status: "active",
+            token: "new-token",
+            refreshToken: "new-rt",
+          },
+        }),
+      });
+      mockJsonResponse({ list: [] });
+
+      const { fetchHotArticles } = await import("@/services/api");
+      await fetchHotArticles();
+
+      const stored = JSON.parse(
+        localStorage.getItem("ai_creator_user") || "{}"
+      );
+      expect(stored.workspaceDraftId).toBe("draft-1");
+      expect(stored.role).toBe("editor");
+      expect(stored.status).toBe("active");
+      expect(stored.token).toBe("new-token");
+      expect(stored.refreshToken).toBe("new-rt");
+    });
   });
 });

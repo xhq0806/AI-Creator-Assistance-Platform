@@ -4,21 +4,21 @@ import {
   listDirtyDrafts,
   getLatestLocalDraft,
   markDraftSynced,
+  type OfflineDraft,
 } from "@/utils/offlineDraft";
 import localforage from "localforage";
-import type { ArticleDraft } from "@/services/api";
 
 // localforage operations are async; we test against a real localforage
 // instance since it works in-memory in jsdom.
 
-function makeDraft(overrides: Partial<ArticleDraft> & { localId: string; userId: number } = {}) {
+function makeDraft(overrides: Partial<OfflineDraft> = {}) {
   const draft = {
     localId: overrides.localId || createLocalDraftId(),
     userId: overrides.userId ?? 1,
     title: overrides.title || "Test Draft",
     content: overrides.content || "Test content",
     media_urls: overrides.media_urls || [],
-    status: (overrides.status as ArticleDraft["status"]) || "draft",
+    status: overrides.status || "draft",
     updatedAt: Date.now(),
     dirty: overrides.dirty !== undefined ? overrides.dirty : true,
   };

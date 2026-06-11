@@ -32,6 +32,7 @@ interface CurrentUser {
   id: number;
   username: string;
   role: 'user' | 'editor' | 'admin';
+  token?: string;
 }
 
 function getUser(): CurrentUser | null {

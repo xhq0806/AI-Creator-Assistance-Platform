@@ -91,6 +91,28 @@ export type AuditManualAnnotationItem = {
   annotation_note?: string; annotated_at?: string;
 };
 
+export type AuditEvaluationMetric = {
+  accuracy: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  total: number;
+};
+
+export type AuditEvaluationReportItem = {
+  id: number;
+  user_id?: number | null;
+  total_samples: number;
+  accuracy_rate: number;
+  precision_rate: number;
+  recall_rate: number;
+  f1_score: number;
+  per_category_metrics?: Record<string, AuditEvaluationMetric>;
+  per_risk_level_metrics?: Record<string, AuditEvaluationMetric>;
+  confusion_matrix?: Record<string, Record<string, number>>;
+  created_at?: string;
+};
+
 export type OfflineDraftSyncResult = {
   synced: number;
   results: { localId?: string; serverId?: number; action?: "created" | "updated"; skipped?: boolean; reason?: string }[];

@@ -16,7 +16,7 @@ export default function PasswordSettingsPage() {
 
   if (!currentUser) {
     history.push("/login");
-    return null;
+    return;
   }
 
   async function handleSubmit(values: PasswordForm) {

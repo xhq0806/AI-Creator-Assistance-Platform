@@ -183,7 +183,7 @@ export default function HotFeedPage() {
                   src={article.cover_url}
                   alt={article.title}
                   loading={index < 3 ? "eager" : "lazy"}
-                  fetchpriority={index < 3 ? "high" : "auto"}
+                  fetchPriority={index < 3 ? "high" : "auto"}
                   onError={(event) => {
                     event.currentTarget.src = createFallbackCover(
                       article.title

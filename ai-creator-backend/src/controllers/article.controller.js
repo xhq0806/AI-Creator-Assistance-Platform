@@ -17,6 +17,7 @@ const {
   refreshArticleRank,
 } = require("../services/ranking.service");
 const { ok } = require("../utils/apiResponse");
+const { persistMediaUrls } = require("../utils/persistMedia");
 
 function serializeArticle(article) {
   const payload = article.toJSON ? article.toJSON() : article;
@@ -108,11 +109,13 @@ async function upsertDraft(req, res, next) {
       qualityScore = Number(article?.quality_score || 0);
     }
 
+    const persistedMediaUrls = await persistMediaUrls(media_urls);
+
     const payload = {
       user_id: userId,
       title,
       content: finalContent,
-      media_urls,
+      media_urls: persistedMediaUrls,
       category,
       status: finalStatus,
       quality_score: qualityScore,
@@ -216,11 +219,21 @@ async function detail(req, res, next) {
       return res.status(404).json({ code: 404, message: "文章不存在" });
     }
 
-    await article.increment("view_count", { by: 1 });
-    await article.reload({
-      include: [{ model: User, attributes: ["id", "username"] }],
-    });
-    await refreshArticleRank(article);
+    const isPublished = article.status === "published";
+    const isAuthor = req.user && Number(req.user.id) === Number(article.user_id);
+    const isStaff = req.user && ["admin", "editor"].includes(req.user.role);
+
+    if (!isPublished && !isAuthor && !isStaff) {
+      return res.status(404).json({ code: 404, message: "文章不存在" });
+    }
+
+    if (isPublished) {
+      await article.increment("view_count", { by: 1 });
+      await article.reload({
+        include: [{ model: User, attributes: ["id", "username"] }],
+      });
+      await refreshArticleRank(article);
+    }
 
     return ok(res, serializeArticle(article));
   } catch (error) {
